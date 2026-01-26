@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Skin Select - Unfair Parkour</title>
+    <style>
+        :root {
+            --bg: #111;
+            --primary: white;
+            --accent: #555;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg);
+            color: var(--primary);
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 40px;
+            letter-spacing: 2px;
+        }
+
+        /* 스킨 리스트 컨테이너 */
+        .skin-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 25px;
+            margin-bottom: 50px;
+        }
+
+        /* 개별 스킨 아이템 */
+        .skin-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .skin-item:active {
+            transform: scale(0.9);
+        }
+
+        /* 스킨 미리보기 사각형 (게임 캐릭터와 동일 비율) */
+        .preview-box {
+            width: 60px;
+            height: 60px;
+            border: 2px solid var(--accent);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        /* 선택된 스킨 강조 */
+        .skin-item.selected .preview-box {
+            border-color: var(--primary);
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+        }
+
+        .skin-item.selected .preview-box::after {
+            content: '✓';
+            position: absolute;
+            color: var(--bg);
+            font-weight: bold;
+            background: var(--primary);
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            top: -10px;
+            right: -10px;
+            font-size: 12px;
+        }
+
+        .skin-name {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+        }
+
+        /* 하단 컨트롤 */
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .btn {
+            width: 240px;
+            padding: 15px;
+            background: none;
+            border: 1px solid var(--primary);
+            color: var(--primary);
+            font-family: inherit;
+            font-size: 1rem;
+            cursor: pointer;
+            text-decoration: none;
+            text-align: center;
+            transition: 0.3s;
+        }
+
+        .btn:hover {
+            background: var(--primary);
+            color: var(--bg);
+        }
+
+        .btn.secondary {
+            border-color: #444;
+            color: #888;
+            font-size: 0.8rem;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>SELECT SKIN</h1>
+
+    <div class="skin-grid" id="skinGrid">
+        </div>
+
+    <div class="controls">
+        <button class="btn" onclick="saveAndGoBack()">APPLY & BACK</button>
+    </div>
+
+    <script>
+        // 스킨 데이터 세팅
+        const skins = [
+            { id: 'classic', name: 'Classic', color: '#ffffff' },
+            { id: 'ghost', name: 'Ghost', color: '#888888' },
+            { id: 'blood', name: 'Blood', color: '#ff4444' },
+            { id: 'gold', name: 'Gold', color: '#ffd700' },
+            { id: 'neon', name: 'Hacker', color: '#00ff00' },
+            { id: 'void', name: 'Void', color: '#4444ff' }
+        ];
+
+        // 현재 선택된 스킨 ID (기본값: classic)
+        let selectedId = localStorage.getItem('selectedSkinId') || 'classic';
+
+        const grid = document.getElementById('skinGrid');
+
+        // 스킨 목록 렌더링
+        function renderSkins() {
+            grid.innerHTML = '';
+            skins.forEach(skin => {
+                const item = document.createElement('div');
+                item.className = `skin-item ${skin.id === selectedId ? 'selected' : ''}`;
+                item.onclick = () => selectSkin(skin.id);
+
+                item.innerHTML = `
+                    <div class="preview-box" style="background-color: ${skin.color}"></div>
+                    <div class="skin-name">${skin.name}</div>
+                `;
+                grid.appendChild(item);
+            });
+        }
+
+        // 스킨 선택 함수
+        function selectSkin(id) {
+            selectedId = id;
+            renderSkins();
+            // 효과음 대신 진동 (모바일 억까 감성)
+            if (navigator.vibrate) navigator.vibrate(20);
+        }
+
+        // 저장 후 이전 페이지(메인)로 이동
+        function saveAndGoBack() {
+            const skinData = skins.find(s => s.id === selectedId);
+            localStorage.setItem('selectedSkinId', selectedId);
+            localStorage.setItem('playerColor', skinData.color); // 게임 파일에서 참조할 색상값
+            
+            // 메인 페이지 파일명이 index.html이라고 가정
+            window.location.href = 'main.html'; 
+        }
+
+        renderSkins();
+    </script>
+</body>
+</html>
