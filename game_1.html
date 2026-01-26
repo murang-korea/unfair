@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Stage 1 - Unfair Parkour</title>
+    <title>Stage 1 - 미니멀 억까 파쿠르</title>
     <style>
         body { margin: 0; padding: 0; background-color: #111; color: white; font-family: 'Courier New', monospace; overflow: hidden; touch-action: manipulation; }
         canvas { display: block; background-color: #222; }
@@ -38,13 +38,15 @@
     window.addEventListener('resize', resize);
     resize();
 
+    // 게임 상태 변수
     let deaths = 0;
     let isCleared = false;
+    let isResetting = false; // 사망 카운트 중복 방지 플래그
     const gravity = 0.45;
     const moveSpeed = 4.5;
     let cameraX = 0;
     
-    // 스킨 적용 (localStorage에서 가져옴, 없으면 흰색)
+    // localStorage에서 스킨 색상 로드 (없으면 흰색)
     const playerColor = localStorage.getItem('playerColor') || '#ffffff';
 
     let player = {
@@ -55,41 +57,50 @@
 
     let keys = {};
     
-    // 스테이지 1 구성
-    const stage1Platforms = [
-        {x: 0, y: 450, w: 400, h: 40, type: 'normal'},      // 시작 지점
-        {x: 500, y: 400, w: 100, h: 20, type: 'disappear'}, // 밟으면 사라짐 (억까 1)
+    // 스테이지 1 구성 (좌표 및 타입)
+    const stage1Layout = [
+        {x: 0, y: 450, w: 400, h: 40, type: 'normal'},      
+        {x: 500, y: 400, w: 100, h: 20, type: 'disappear'}, 
         {x: 700, y: 350, w: 120, h: 20, type: 'normal'},
-        {x: 900, y: 300, w: 100, h: 20, type: 'slippery'},  // 미끄러움 (억까 2)
+        {x: 900, y: 300, w: 100, h: 20, type: 'slippery'},  
         {x: 1100, y: 350, w: 150, h: 20, type: 'normal'},
-        {x: 1350, y: 300, w: 80, h: 20, type: 'disappear'}, // 골 직전 사라짐 (억까 3)
-        {x: 1550, y: 250, w: 150, h: 20, type: 'goal'}      // 목적지 (빨간색)
+        {x: 1350, y: 300, w: 80, h: 20, type: 'disappear'}, 
+        {x: 1550, y: 250, w: 150, h: 20, type: 'goal'}      
     ];
 
     let platforms = [];
 
     function initStage() {
-        platforms = stage1Platforms.map(p => ({ ...p, hidden: false }));
+        platforms = stage1Layout.map(p => ({ ...p, hidden: false }));
     }
 
     function resetPlayer() {
-        if(isCleared) return;
+        if(isCleared || isResetting) return;
+        
+        isResetting = true; // 리셋 프로세스 시작
         deaths++;
         deathDisplay.innerText = deaths;
         
-        // 사망 메시지
+        // 억까 메시지 표시
         msgDisplay.innerText = "의도된 플레이입니다.";
         msgDisplay.style.display = 'block';
-        setTimeout(() => msgDisplay.style.display = 'none', 1000);
+        msgDisplay.style.color = "white";
 
+        // 캐릭터 및 스테이지 리셋
         player.x = player.spawnX;
         player.y = player.spawnY;
         player.vx = 0;
         player.vy = 0;
         initStage();
+
+        // 잠깐의 대기 후 다시 사망 판정 가능하게 변경 (카운트 중복 방지)
+        setTimeout(() => {
+            msgDisplay.style.display = 'none';
+            isResetting = false;
+        }, 150);
     }
 
-    // 입력 처리
+    // 키보드 및 터치 입력 처리
     window.addEventListener('keydown', e => keys[e.code] = true);
     window.addEventListener('keyup', e => keys[e.code] = false);
 
@@ -97,6 +108,7 @@
         const el = document.getElementById(id);
         el.onpointerdown = (e) => { e.preventDefault(); keys[key] = true; };
         el.onpointerup = (e) => { e.preventDefault(); keys[key] = false; };
+        el.onpointerleave = (e) => { e.preventDefault(); keys[key] = false; };
     };
     setTouch('btnLeft', 'ArrowLeft');
     setTouch('btnRight', 'ArrowRight');
@@ -105,13 +117,14 @@
     function update() {
         if(isCleared) return;
 
+        // 좌우 이동
         if (keys['ArrowLeft']) player.vx = -moveSpeed;
         else if (keys['ArrowRight']) player.vx = moveSpeed;
         else player.vx *= 0.8;
 
-        if (keys['Space'] && player.grounded) {
-            // 점프력 랜덤 변조 (억까)
-            player.vy = -11 * (0.9 + Math.random() * 0.2);
+        // 점프 (억까: 점프 높이 랜덤)
+        if ((keys['Space'] || keys['KeyW']) && player.grounded) {
+            player.vy = -11 * (0.85 + Math.random() * 0.3);
             player.grounded = false;
         }
 
@@ -120,25 +133,30 @@
         player.y += player.vy;
         player.grounded = false;
 
-        // 카메라 추적
-        let targetX = player.x - canvas.width / 3;
-        cameraX += (targetX - cameraX) * 0.1;
+        // 카메라 팔로잉 (플레이어가 중심에서 약간 왼쪽에 위치하도록)
+        let targetCameraX = player.x - canvas.width / 3;
+        cameraX += (targetCameraX - cameraX) * 0.1;
 
-        // 충돌 체크
+        // 충돌 판정
         platforms.forEach(p => {
             if (p.hidden) return;
 
             if (player.x < p.x + p.w && player.x + player.w > p.x &&
                 player.y + player.h > p.y && player.y < p.y + p.h) {
                 
+                // 발판 위로 착지했을 때만 처리
                 if (player.vy > 0 && player.y + player.h - player.vy <= p.y) {
                     player.y = p.y - player.h;
                     player.vy = 0;
                     player.grounded = true;
 
-                    if (p.type === 'disappear') setTimeout(() => p.hidden = true, 150);
-                    if (p.type === 'slippery') player.x += 4;
-                    
+                    // 억까 메커니즘 발동
+                    if (p.type === 'disappear') {
+                        setTimeout(() => p.hidden = true, 150);
+                    }
+                    if (p.type === 'slippery') {
+                        player.x += 4; // 미끄러짐 효과
+                    }
                     if (p.type === 'goal') {
                         clearStage();
                     }
@@ -146,11 +164,16 @@
             }
         });
 
-        if (player.y > canvas.height + 100 || player.x < cameraX - 100) resetPlayer();
+        // 추락 사망 혹은 화면 뒤로 밀려남
+        if (player.y > canvas.height + 100 || player.x < cameraX - 50) {
+            resetPlayer();
+        }
     }
 
     function clearStage() {
+        if(isCleared) return;
         isCleared = true;
+        
         msgDisplay.innerText = "STAGE 1 CLEAR!";
         msgDisplay.style.display = 'block';
         msgDisplay.style.color = "#00ff00";
@@ -163,17 +186,23 @@
 
     function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
         ctx.save();
-        ctx.translate(-cameraX, 0);
+        ctx.translate(-Math.floor(cameraX), 0);
 
-        // 플레이어 (스킨 적용)
+        // 플레이어 렌더링
         ctx.fillStyle = playerColor;
         ctx.fillRect(player.x, player.y, player.w, player.h);
 
-        // 발판
+        // 발판 렌더링
         platforms.forEach(p => {
             if (p.hidden) return;
-            ctx.fillStyle = p.type === 'goal' ? "#ff4444" : (p.type === 'slippery' ? "#4444ff" : "#666");
+            
+            if (p.type === 'goal') ctx.fillStyle = "#ff4444";
+            else if (p.type === 'slippery') ctx.fillStyle = "#4444ff";
+            else if (p.type === 'disappear') ctx.fillStyle = "#aaa";
+            else ctx.fillStyle = "#666";
+            
             ctx.fillRect(p.x, p.y, p.w, p.h);
         });
 
@@ -181,6 +210,7 @@
         requestAnimationFrame(() => { update(); draw(); });
     }
 
+    // 초기 실행
     initStage();
     draw();
 </script>
