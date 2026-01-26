@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Stage 2 - Vertical Hell</title>
+    <style>
+        body { margin: 0; padding: 0; background-color: #111; color: white; font-family: 'Courier New', monospace; overflow: hidden; touch-action: manipulation; }
+        canvas { display: block; background-color: #1a1a1a; }
+        #ui { position: absolute; top: 10px; left: 10px; z-index: 10; font-size: 18px; }
+        #msg { position: absolute; width: 100%; text-align: center; top: 45%; font-size: 24px; font-weight: bold; display: none; z-index: 10; text-shadow: 2px 2px #000; }
+        .controls { position: absolute; bottom: 20px; width: 100%; display: flex; justify-content: space-around; z-index: 10; pointer-events: none; }
+        .btn { width: 70px; height: 70px; background: rgba(255, 255, 255, 0.1); border: 1px solid white; display: flex; align-items: center; justify-content: center; pointer-events: auto; user-select: none; }
+    </style>
+</head>
+<body>
+
+    <div id="ui">Stage 2 | Deaths: <span id="deathCount">0</span></div>
+    <div id="msg">의도된 설계입니다</div>
+    <canvas id="gameCanvas"></canvas>
+
+    <div class="controls">
+        <div id="btnLeft" class="btn">◀</div>
+        <div id="btnJump" class="btn">JUMP</div>
+        <div id="btnRight" class="btn">▶</div>
+    </div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const deathDisplay = document.getElementById('deathCount');
+    const msgDisplay = document.getElementById('msg');
+
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    let deaths = 0;
+    let isCleared = false;
+    let isResetting = false;
+    const gravity = 0.4;
+    const moveSpeed = 5;
+    let cameraY = 0; 
+    
+    const playerColor = localStorage.getItem('playerColor') || '#ffffff';
+
+    let player = {
+        x: 150, y: 550, w: 25, h: 25, vx: 0, vy: 0,
+        grounded: false,
+        spawnX: 150, spawnY: 550
+    };
+
+    let keys = {};
+    
+    const stage2Layout = [
+        {x: 50, y: 600, w: 200, h: 20, type: 'normal'},      
+        {x: 250, y: 500, w: 80, h: 20, type: 'normal'},
+        {x: 50, y: 420, w: 80, h: 20, type: 'disappear'},   
+        {x: 180, y: 340, w: 100, h: 20, type: 'ceiling'},   
+        {x: 40, y: 260, w: 60, h: 20, type: 'normal'},
+        {x: 150, y: 180, w: 200, h: 20, type: 'fake_goal'},  
+        {x: 320, y: 100, w: 40, h: 20, type: 'normal'},
+        {x: 50, y: 20, w: 100, h: 20, type: 'goal'}         
+    ];
+
+    let platforms = [];
+
+    function initStage() {
+        platforms = stage2Layout.map(p => ({ ...p, hidden: false, triggering: false }));
+        cameraY = 0;
+    }
+
+    function resetPlayer() {
+        if(isCleared || isResetting) return;
+        isResetting = true;
+        deaths++;
+        deathDisplay.innerText = deaths;
+        
+        msgDisplay.innerText = "아까 그게 골 지점일 리가요";
+        msgDisplay.style.display = 'block';
+
+        player.x = player.spawnX;
+        player.y = player.spawnY;
+        player.vx = 0;
+        player.vy = 0;
+        initStage();
+
+        setTimeout(() => {
+            msgDisplay.style.display = 'none';
+            isResetting = false;
+        }, 200);
+    }
+
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    const setTouch = (id, k) => {
+        const el = document.getElementById(id);
+        el.onpointerdown = (e) => { e.preventDefault(); keys[k] = true; };
+        el.onpointerup = (e) => { e.preventDefault(); keys[k] = false; };
+        el.onpointerleave = (e) => { e.preventDefault(); keys[k] = false; };
+    };
+    setTouch('btnLeft', 'ArrowLeft');
+    setTouch('btnRight', 'ArrowRight');
+    setTouch('btnJump', 'Space');
+
+    function update() {
+        if(isCleared) return;
+
+        if (keys['ArrowLeft']) player.vx = -moveSpeed;
+        else if (keys['ArrowRight']) player.vx = moveSpeed;
+        else player.vx *= 0.8;
+
+        if (keys['Space'] && player.grounded) {
+            player.vy = -11;
+            player.grounded = false;
+        }
+
+        player.vy += gravity;
+        player.x += player.vx;
+        player.y += player.vy;
+        player.grounded = false;
+
+        let targetY = player.y - canvas.height / 2;
+        cameraY += (targetY - cameraY) * 0.1;
+
+        platforms.forEach(p => {
+            if (p.hidden) return;
+
+            if (player.x < p.x + p.w && player.x + player.w > p.x &&
+                player.y < p.y + p.h && player.y + player.h > p.y) {
+                
+                if (p.type === 'ceiling' && player.vy < 0) {
+                    player.vy = 5;
+                    msgDisplay.innerText = "머리 조심";
+                    msgDisplay.style.display = 'block';
+                    setTimeout(() => msgDisplay.style.display = 'none', 500);
+                }
+
+                if (player.vy > 0 && player.y + player.h - player.vy <= p.y) {
+                    if (p.type === 'fake_goal') {
+                        if (!p.triggering) {
+                            p.triggering = true;
+                            // 0.2초 대기 후 사라지게 설정
+                            setTimeout(() => { 
+                                p.hidden = true; 
+                                if(player.grounded && !isResetting) player.vy = 5; 
+                            }, 200);
+                        }
+                    }
+                    
+                    player.y = p.y - player.h;
+                    player.vy = 0;
+                    player.grounded = true;
+
+                    if (p.type === 'disappear') setTimeout(() => p.hidden = true, 200);
+                    if (p.type === 'goal') clearStage();
+                }
+            }
+        });
+
+        if (player.y > 700 || player.x < 0 || player.x > canvas.width) resetPlayer();
+    }
+
+    function clearStage() {
+        if(isCleared) return;
+        isCleared = true;
+        msgDisplay.innerText = "STAGE 2 CLEAR!";
+        msgDisplay.style.display = 'block';
+        msgDisplay.style.color = "#00ffff";
+        setTimeout(() => {
+            window.location.href = 'https://murang-korea.github.io/unfair/game_3.html';
+        }, 3000);
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(0, -cameraY);
+
+        ctx.fillStyle = playerColor;
+        ctx.fillRect(player.x, player.y, player.w, player.h);
+
+        platforms.forEach(p => {
+            if (p.hidden) return;
+            ctx.fillStyle = (p.type === 'goal' || p.type === 'fake_goal') ? "#ff4444" : "#777";
+            ctx.fillRect(p.x, p.y, p.w, p.h);
+        });
+
+        ctx.restore();
+        requestAnimationFrame(() => { update(); draw(); });
+    }
+
+    initStage();
+    draw();
+</script>
+</body>
+</html>
