@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Stages - Unfair Parkour</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #111;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+
+        /* 버튼들을 담는 그리드 컨테이너 */
+        .button-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr); /* 4열 배치 */
+            gap: 10px;
+            width: 100%;
+            max-width: 500px;
+        }
+
+        /* 미니멀 버튼 스타일 */
+        .stage-btn {
+            aspect-ratio: 1 / 1; /* 정사각형 */
+            background: none;
+            border: 1px solid white;
+            color: white;
+            font-family: 'Courier New', monospace;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: all 0.1s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            outline: none;
+        }
+
+        .stage-btn:hover {
+            background: white;
+            color: black;
+        }
+
+        .stage-btn:active {
+            transform: scale(0.9);
+        }
+
+        /* 하단 뒤로가기 버튼만 별도 스타일 */
+        .back-area {
+            margin-top: 40px;
+            width: 100%;
+            max-width: 500px;
+        }
+
+        .btn-back {
+            width: 100%;
+            padding: 15px;
+            background: none;
+            border: 1px solid #444;
+            color: #444;
+            font-family: inherit;
+            cursor: pointer;
+            text-decoration: none;
+            display: block;
+            text-align: center;
+        }
+
+        .btn-back:hover {
+            border-color: #888;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="button-grid" id="grid">
+        </div>
+
+    <div class="back-area">
+        <button class="btn-back" onclick="location.href='index.html'">BACK</button>
+    </div>
+
+    <script>
+        const grid = document.getElementById('grid');
+        const totalButtons = 40; // 생성할 버튼 개수
+
+        for (let i = 1; i <= totalButtons; i++) {
+            const btn = document.createElement('button');
+            btn.className = 'stage-btn';
+            
+            // 숫자를 01, 02 방식으로 포맷팅
+            const num = i < 10 ? '0' + i : i;
+            btn.innerText = num;
+
+            btn.onclick = () => {
+                // 진동 효과
+                if (navigator.vibrate) navigator.vibrate(30);
+                
+                // 실제 게임 페이지로 이동 (스테이지 번호 전달)
+                // 예: index.html?stage=5
+                location.href = `game.html?stage=${i}`;
+            };
+
+            grid.appendChild(btn);
+        }
+    </script>
+</body>
+</html>
