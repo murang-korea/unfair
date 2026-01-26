@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>미니멀 억까 파쿠르 - 메인</title>
+    <style>
+        body { 
+            margin: 0; padding: 0; 
+            background-color: #111; color: white; 
+            font-family: 'Courier New', monospace; 
+            overflow: hidden; touch-action: manipulation;
+            display: flex; justify-content: center; align-items: center;
+            height: 100vh;
+        }
+
+        /* 메인 메뉴 스타일 */
+        #main-menu {
+            text-align: center;
+            z-index: 100;
+        }
+
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 50px;
+            letter-spacing: -2px;
+            animation: flicker 2s infinite;
+        }
+
+        @keyframes flicker {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .menu-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .menu-btn {
+            width: 250px;
+            padding: 15px;
+            background: none;
+            border: 2px solid white;
+            color: white;
+            font-size: 1.2rem;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: block;
+        }
+
+        .menu-btn:hover {
+            background: white;
+            color: black;
+            transform: scale(1.05);
+        }
+
+        /* 배경에서 돌아가는 미니 게임 장식 (선택 사항) */
+        #bg-canvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: -1;
+            opacity: 0.3;
+        }
+
+        .sub-text {
+            margin-top: 30px;
+            font-size: 0.8rem;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="bg-canvas"></canvas>
+
+    <div id="main-menu">
+        <h1>UNFAIR<br>PARKOUR</h1>
+        
+        <div class="menu-container">
+            <button class="menu-btn" onclick="goTo('https://your-game-url.com/play')">
+                PLAY
+            </button>
+
+            <button class="menu-btn" onclick="goTo('https://your-game-url.com/stages')">
+                STAGE SELECT
+            </button>
+
+            <button class="menu-btn" onclick="goTo('https://your-game-url.com/skins')">
+                CHANGE SKIN
+            </button>
+        </div>
+
+        <p class="sub-text">"이 게임은 공정하지 않습니다."</p>
+    </div>
+
+    <script>
+        // 버튼 클릭 시 지정된 사이트로 이동하는 함수
+        function goTo(url) {
+            // 실제 배포 시에는 아래 주석을 해제하세요.
+            // window.location.href = url;
+            alert(url + " (으)로 이동합니다! (현재는 데모 모드)");
+        }
+
+        // 배경 애니메이션 (심플한 사각형들이 떨어지는 효과)
+        const canvas = document.getElementById('bg-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let particles = [];
+        for(let i=0; i<20; i++) {
+            particles.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                size: Math.random() * 30 + 10,
+                speed: Math.random() * 2 + 1
+            });
+        }
+
+        function drawBg() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
+            
+            particles.forEach(p => {
+                ctx.fillRect(p.x, p.y, p.size, p.size);
+                p.y += p.speed;
+                if(p.y > canvas.height) p.y = -p.size;
+            });
+            requestAnimationFrame(drawBg);
+        }
+        drawBg();
+    </script>
+</body>
+</html>
