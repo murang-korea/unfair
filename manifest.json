@@ -1,4 +1,5 @@
 {
+  "id": "/unfair/",
   "name": "Unfair Parkour",
   "short_name": "Unfair",
   "description": "억까 그 자체인 파쿠르 게임",
@@ -15,12 +16,14 @@
     {
       "src": "/unfair/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
       "src": "/unfair/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ],
 
