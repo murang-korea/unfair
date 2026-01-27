@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Stage 9 - Dimension Glitch</title>
+    <style>
+        body { margin: 0; padding: 0; background-color: #000; color: #0f0; font-family: 'Courier New', monospace; overflow: hidden; touch-action: manipulation; }
+        canvas { display: block; background-color: #050805; }
+        #ui { position: absolute; top: 10px; left: 10px; z-index: 10; font-size: 18px; text-shadow: 0 0 5px #0f0; }
+        #msg { position: absolute; width: 100%; text-align: center; top: 40%; font-size: 32px; font-weight: bold; display: none; z-index: 10; text-shadow: 0 0 10px #0f0; }
+        .controls { position: absolute; bottom: 20px; width: 100%; display: flex; justify-content: space-around; z-index: 10; pointer-events: none; }
+        .btn { width: 70px; height: 70px; background: rgba(0, 255, 0, 0.05); border: 1px solid #0f0; display: flex; align-items: center; justify-content: center; pointer-events: auto; user-select: none; color: #0f0; }
+        /* 글리치 효과 */
+        .glitch { animation: scan 0.2s infinite; opacity: 0.8; }
+        @keyframes scan {
+            0% { transform: translate(2px, 1px); }
+            50% { transform: translate(-2px, -1px); filter: hue-rotate(90deg); }
+            100% { transform: translate(0, 0); }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui" class="glitch">ERROR_CODE: <span id="deathCount">0</span> | ADDR: 0x9F32</div>
+    <div id="msg">STAGE 9 CLEAR!</div>
+    <canvas id="gameCanvas"></canvas>
+
+    <div class="controls">
+        <div id="btnLeft" class="btn">◀</div>
+        <div id="btnJump" class="btn">JUMP</div>
+        <div id="btnRight" class="btn">▶</div>
+    </div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const deathDisplay = document.getElementById('deathCount');
+    const msgDisplay = document.getElementById('msg');
+
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    let deaths = 0;
+    let isCleared = false;
+    let isResetting = false;
+    const gravity = 0.45;
+    const moveSpeed = 4.5;
+    let cameraX = 0;
+    let frameCount = 0;
+    
+    const playerColor = localStorage.getItem('playerColor') || '#ffffff';
+    let ghostPositions = []; // 잔상 효과용
+
+    let player = {
+        x: 100, y: 300, w: 25, h: 25, vx: 0, vy: 0,
+        grounded: false,
+        spawnX: 100, spawnY: 300
+    };
+
+    let keys = {};
+    
+    // 스테이지 9 레이아웃: "데이터 오염"
+    const stage9Layout = [
+        {x: 0, y: 450, w: 200, h: 40, type: 'normal'},
+        {x: 300, y: 400, w: 100, h: 20, type: 'glitch_pos'}, // 시각적 위치와 실제 위치가 계속 변함
+        {x: 500, y: 300, w: 80, h: 20, type: 'normal'},
+        {x: 700, y: 450, w: 120, h: 20, type: 'invisible_trigger'}, // 밟으면 갑자기 위에서 발판이 떨어짐
+        {x: 900, y: 250, w: 100, h: 20, type: 'normal'},
+        {x: 1100, y: 350, w: 80, h: 20, type: 'fake_goal'},
+        {x: 1350, y: 350, w: 200, h: 20, type: 'goal'}
+    ];
+
+    let platforms = [];
+
+    function initStage() {
+        platforms = stage9Layout.map(p => ({ ...p, hidden: false, triggered: false, visualX: p.x }));
+        ghostPositions = [];
+    }
+
+    function resetPlayer() {
+        if(isCleared || isResetting) return;
+        isResetting = true;
+        deaths++;
+        deathDisplay.innerText = Math.floor(Math.random() * 999); // 사망 횟수 UI 억까
+        
+        player.x = player.spawnX;
+        player.y = player.spawnY;
+        player.vx = 0;
+        player.vy = 0;
+        initStage();
+
+        setTimeout(() => { 
+            deathDisplay.innerText = deaths;
+            isResetting = false; 
+        }, 200);
+    }
+
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    const setTouch = (id, k) => {
+        const el = document.getElementById(id);
+        el.onpointerdown = (e) => { e.preventDefault(); keys[k] = true; };
+        el.onpointerup = (e) => { e.preventDefault(); keys[k] = false; };
+        el.onpointerleave = (e) => { e.preventDefault(); keys[k] = false; };
+    };
+    setTouch('btnLeft', 'ArrowLeft');
+    setTouch('btnRight', 'ArrowRight');
+    setTouch('btnJump', 'Space');
+
+    function update() {
+        if(isCleared) return;
+        frameCount++;
+
+        if (keys['ArrowLeft']) player.vx = -moveSpeed;
+        else if (keys['ArrowRight']) player.vx = moveSpeed;
+        else player.vx *= 0.8;
+
+        if ((keys['Space'] || keys['KeyW']) && player.grounded) {
+            player.vy = -11;
+            player.grounded = false;
+        }
+
+        player.vy += gravity;
+        player.x += player.vx;
+        player.y += player.vy;
+        player.grounded = false;
+
+        // 잔상 데이터 기록
+        ghostPositions.unshift({x: player.x, y: player.y});
+        if(ghostPositions.length > 10) ghostPositions.pop();
+
+        let targetX = player.x - canvas.width / 3;
+        cameraX += (targetX - cameraX) * 0.1;
+
+        platforms.forEach(p => {
+            // 위치 글리치 억까
+            if (p.type === 'glitch_pos') {
+                p.visualX = p.x + Math.sin(frameCount * 0.2) * 30;
+            }
+
+            if (p.hidden) return;
+
+            if (player.x < p.x + p.w && player.x + player.w > p.x &&
+                player.y + player.h > p.y && player.y < p.y + p.h) {
+                
+                if (player.vy > 0 && player.y + player.h - player.vy <= p.y) {
+                    player.y = p.y - player.h;
+                    player.vy = 0;
+                    player.grounded = true;
+
+                    if (p.type === 'invisible_trigger' && !p.triggered) {
+                        p.triggered = true;
+                        // 다음 발판을 생성하거나 위치 변경
+                        platforms.push({x: 850, y: 350, w: 40, h: 20, type: 'normal'});
+                    }
+                    if (p.type === 'fake_goal' && !p.triggered) {
+                        p.triggered = true;
+                        setTimeout(() => { p.hidden = true; }, 100);
+                    }
+                    if (p.type === 'goal') clearStage();
+                }
+            }
+        });
+
+        if (player.y > canvas.height + 100 || player.x < cameraX - 100) resetPlayer();
+    }
+
+    function clearStage() {
+        if(isCleared) return;
+        isCleared = true;
+        msgDisplay.style.display = 'block';
+        setTimeout(() => {
+            window.location.href = 'https://murang-korea.github.io/unfair/game_10.html';
+        }, 3000);
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.save();
+        ctx.translate(-Math.floor(cameraX), 0);
+
+        // 잔상 그리기
+        ghostPositions.forEach((pos, i) => {
+            ctx.fillStyle = `rgba(0, 255, 0, ${0.3 - i * 0.03})`;
+            ctx.fillRect(pos.x, pos.y, player.w, player.h);
+        });
+
+        // 실제 플레이어
+        ctx.fillStyle = playerColor;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = "#0f0";
+        ctx.fillRect(player.x, player.y, player.w, player.h);
+        ctx.shadowBlur = 0;
+
+        // 발판
+        platforms.forEach(p => {
+            if (p.hidden) return;
+            ctx.fillStyle = (p.type === 'goal' || p.type === 'fake_goal') ? "#f00" : "#050";
+            ctx.strokeStyle = "#0f0";
+            ctx.lineWidth = 2;
+            
+            // glitch_pos 타입은 시각적 위치(visualX)에 그림
+            let drawX = (p.type === 'glitch_pos') ? p.visualX : p.x;
+            ctx.fillRect(drawX, p.y, p.w, p.h);
+            ctx.strokeRect(drawX, p.y, p.w, p.h);
+        });
+
+        ctx.restore();
+
+        // 전체 화면 노이즈 효과 (랜덤 선)
+        if(Math.random() > 0.95) {
+            ctx.fillStyle = "rgba(0, 255, 0, 0.05)";
+            ctx.fillRect(0, Math.random() * canvas.height, canvas.width, 2);
+        }
+
+        requestAnimationFrame(() => { update(); draw(); });
+    }
+
+    initStage();
+    draw();
+</script>
+</body>
+</html>
