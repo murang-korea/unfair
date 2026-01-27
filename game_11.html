@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Stage 11 - Timed Fragility</title>
+    <style>
+        body { margin: 0; padding: 0; background-color: #001a1a; color: #00ffff; font-family: 'Courier New', monospace; overflow: hidden; touch-action: manipulation; }
+        canvas { display: block; background-color: #000d0d; }
+        #ui { position: absolute; top: 10px; left: 10px; z-index: 10; font-size: 18px; }
+        #msg { position: absolute; width: 100%; text-align: center; top: 40%; font-size: 32px; font-weight: bold; display: none; z-index: 10; text-shadow: 2px 2px #000; }
+        .controls { position: absolute; bottom: 20px; width: 100%; display: flex; justify-content: space-around; z-index: 10; pointer-events: none; }
+        .btn { width: 70px; height: 70px; background: rgba(0, 255, 255, 0.1); border: 1px solid #00ffff; display: flex; align-items: center; justify-content: center; pointer-events: auto; user-select: none; color: #00ffff; }
+    </style>
+</head>
+<body>
+
+    <div id="ui">QUANTUM_STABILITY: <span id="stability">100</span>% | Deaths: <span id="deathCount">0</span></div>
+    <div id="msg">STAGE 11 CLEAR!</div>
+    <canvas id="gameCanvas"></canvas>
+
+    <div class="controls">
+        <div id="btnLeft" class="btn">◀</div>
+        <div id="btnJump" class="btn">JUMP</div>
+        <div id="btnRight" class="btn">▶</div>
+    </div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const deathDisplay = document.getElementById('deathCount');
+    const stabilityDisplay = document.getElementById('stability');
+    const msgDisplay = document.getElementById('msg');
+
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    let deaths = 0;
+    let isCleared = false;
+    let isResetting = false;
+    const gravity = 0.45;
+    const moveSpeed = 4.5;
+    let cameraX = 0;
+    let airTime = 0; // 공중에 떠 있는 시간
+    
+    const playerColor = localStorage.getItem('playerColor') || '#ffffff';
+
+    let player = {
+        x: 100, y: 300, w: 25, h: 25, vx: 0, vy: 0,
+        grounded: false,
+        spawnX: 100, spawnY: 300
+    };
+
+    let keys = {};
+    
+    const stage11Layout = [
+        {x: 0, y: 450, w: 200, h: 40, type: 'normal'},
+        {x: 300, y: 350, w: 150, h: 20, type: 'shrinking'}, // 공중에 오래 있을수록 가로 길이가 줄어듦
+        {x: 550, y: 400, w: 100, h: 20, type: 'trigger_a'}, // 밟으면 다음 발판이 나타남
+        {x: 750, y: 300, w: 80, h: 20, type: 'ghost'},     // trigger_a를 밟아야 실체화됨
+        {x: 950, y: 350, w: 100, h: 20, type: 'shrinking'},
+        {x: 1200, y: 400, w: 80, h: 20, type: 'fake_goal'},
+        {x: 1450, y: 350, w: 200, h: 20, type: 'goal'}
+    ];
+
+    let platforms = [];
+
+    function initStage() {
+        platforms = stage11Layout.map(p => ({ 
+            ...p, 
+            originalW: p.w, 
+            hidden: p.type === 'ghost', 
+            triggered: false 
+        }));
+        airTime = 0;
+    }
+
+    function resetPlayer() {
+        if(isCleared || isResetting) return;
+        isResetting = true;
+        deaths++;
+        deathDisplay.innerText = deaths;
+        
+        player.x = player.spawnX;
+        player.y = player.spawnY;
+        player.vx = 0;
+        player.vy = 0;
+        initStage();
+
+        setTimeout(() => { isResetting = false; }, 200);
+    }
+
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    const setTouch = (id, k) => {
+        const el = document.getElementById(id);
+        el.onpointerdown = (e) => { e.preventDefault(); keys[k] = true; };
+        el.onpointerup = (e) => { e.preventDefault(); keys[k] = false; };
+        el.onpointerleave = (e) => { e.preventDefault(); keys[k] = false; };
+    };
+    setTouch('btnLeft', 'ArrowLeft');
+    setTouch('btnRight', 'ArrowRight');
+    setTouch('btnJump', 'Space');
+
+    function update() {
+        if(isCleared) return;
+
+        if (keys['ArrowLeft']) player.vx = -moveSpeed;
+        else if (keys['ArrowRight']) player.vx = moveSpeed;
+        else player.vx *= 0.8;
+
+        if ((keys['Space'] || keys['KeyW']) && player.grounded) {
+            player.vy = -11;
+            player.grounded = false;
+        }
+
+        player.vy += gravity;
+        player.x += player.vx;
+        player.y += player.vy;
+
+        // 공중 시간 계산 및 안정도 UI 업데이트
+        if (!player.grounded) {
+            airTime += 0.5;
+        } else {
+            airTime = Math.max(0, airTime - 1);
+        }
+        let stability = Math.max(0, 100 - Math.floor(airTime));
+        stabilityDisplay.innerText = stability;
+
+        player.grounded = false;
+
+        let targetX = player.x - canvas.width / 3;
+        cameraX += (targetX - cameraX) * 0.1;
+
+        platforms.forEach(p => {
+            // 억까 기믹: 공중에 오래 떠 있을수록 특정 발판이 작아짐
+            if (p.type === 'shrinking') {
+                p.w = Math.max(10, p.originalW - airTime * 1.5);
+            }
+
+            if (p.hidden) return;
+
+            if (player.x < p.x + p.w && player.x + player.w > p.x &&
+                player.y + player.h > p.y && player.y < p.y + p.h) {
+                
+                if (player.vy > 0 && player.y + player.h - player.vy <= p.y) {
+                    player.y = p.y - player.h;
+                    player.vy = 0;
+                    player.grounded = true;
+
+                    if (p.type === 'trigger_a' && !p.triggered) {
+                        p.triggered = true;
+                        platforms.forEach(plat => { if(plat.type === 'ghost') plat.hidden = false; });
+                    }
+
+                    if (p.type === 'fake_goal' && !p.triggered) {
+                        p.triggered = true;
+                        setTimeout(() => { p.hidden = true; }, 150);
+                    }
+                    if (p.type === 'goal') clearStage();
+                }
+            }
+        });
+
+        if (player.y > canvas.height + 100 || player.x < cameraX - 100) resetPlayer();
+    }
+
+    function clearStage() {
+        if(isCleared) return;
+        isCleared = true;
+        msgDisplay.style.display = 'block';
+        msgDisplay.style.color = "#00ffff";
+        setTimeout(() => {
+            window.location.href = 'https://murang-korea.github.io/unfair/game_12.html';
+        }, 3000);
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(-Math.floor(cameraX), 0);
+
+        // 플레이어
+        ctx.fillStyle = playerColor;
+        ctx.fillRect(player.x, player.y, player.w, player.h);
+
+        // 발판
+        platforms.forEach(p => {
+            if (p.hidden) return;
+            if (p.type === 'shrinking') ctx.fillStyle = "#00aaaa";
+            else if (p.type === 'trigger_a') ctx.fillStyle = "#ffff00";
+            else if (p.type === 'goal' || p.type === 'fake_goal') ctx.fillStyle = "#ff0055";
+            else ctx.fillStyle = "#005555";
+            ctx.fillRect(p.x, p.y, p.w, p.h);
+        });
+
+        ctx.restore();
+        requestAnimationFrame(() => { update(); draw(); });
+    }
+
+    initStage();
+    draw();
+</script>
+</body>
+</html>
