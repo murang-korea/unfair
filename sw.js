@@ -39,10 +39,15 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 
-self.addEventListener('fetch', e => {
-  e.respondWith(
-    caches.match(e.request).then(res => {
-      return res || fetch(e.request);
-    })
+self.addEventListener("fetch", event => {
+  event.respondWith(
+    caches.open("v1").then(cache =>
+      cache.match(event.request).then(res =>
+        res || fetch(event.request).then(net => {
+          cache.put(event.request, net.clone());
+          return net;
+        })
+      )
+    )
   );
 });
