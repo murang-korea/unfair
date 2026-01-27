@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Stage 6 - Inertia Hell</title>
+    <style>
+        body { margin: 0; padding: 0; background-color: #050505; color: white; font-family: 'Courier New', monospace; overflow: hidden; touch-action: manipulation; }
+        canvas { display: block; background-color: #0a0a15; }
+        #ui { position: absolute; top: 10px; left: 10px; z-index: 10; font-size: 18px; }
+        #msg { position: absolute; width: 100%; text-align: center; top: 40%; font-size: 32px; font-weight: bold; display: none; z-index: 10; text-shadow: 2px 2px #000; }
+        .controls { position: absolute; bottom: 20px; width: 100%; display: flex; justify-content: space-around; z-index: 10; pointer-events: none; }
+        .btn { width: 70px; height: 70px; background: rgba(255, 255, 255, 0.05); border: 1px solid #446; display: flex; align-items: center; justify-content: center; pointer-events: auto; user-select: none; color: #88a; }
+    </style>
+</head>
+<body>
+
+    <div id="ui">Stage 6 | Deaths: <span id="deathCount">0</span></div>
+    <div id="msg">STAGE 6 CLEAR!</div>
+    <canvas id="gameCanvas"></canvas>
+
+    <div class="controls">
+        <div id="btnLeft" class="btn">◀</div>
+        <div id="btnJump" class="btn">JUMP</div>
+        <div id="btnRight" class="btn">▶</div>
+    </div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const deathDisplay = document.getElementById('deathCount');
+    const msgDisplay = document.getElementById('msg');
+
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    let deaths = 0;
+    let isCleared = false;
+    let isResetting = false;
+    const gravity = 0.45;
+    let friction = 0.98; // 기본 마찰력 (미끄러움)
+    const accel = 0.5;
+    const maxSpeed = 6;
+    let cameraX = 0;
+    
+    const playerColor = localStorage.getItem('playerColor') || '#ffffff';
+
+    let player = {
+        x: 100, y: 300, w: 25, h: 25, vx: 0, vy: 0,
+        grounded: false,
+        spawnX: 100, spawnY: 300
+    };
+
+    let keys = {};
+    
+    // 스테이지 6 레이아웃: "멈출 수 없는 질주"
+    const stage6Layout = [
+        {x: 0, y: 450, w: 400, h: 40, type: 'ice'},         // 매우 미끄러운 시작점
+        {x: 500, y: 400, w: 100, h: 20, type: 'boost'},     // 밟으면 강제 가속
+        {x: 750, y: 300, w: 80, h: 20, type: 'ice'},
+        {x: 950, y: 350, w: 50, h: 20, type: 'disappear'},  
+        {x: 1100, y: 250, w: 120, h: 20, type: 'ice'},
+        {x: 1300, y: 400, w: 100, h: 20, type: 'fake_goal'},
+        {x: 1500, y: 350, w: 200, h: 20, type: 'goal'}
+    ];
+
+    let platforms = [];
+
+    function initStage() {
+        platforms = stage6Layout.map(p => ({ ...p, hidden: false, triggered: false }));
+        player.vx = 0;
+        player.vy = 0;
+    }
+
+    function resetPlayer() {
+        if(isCleared || isResetting) return;
+        isResetting = true;
+        deaths++;
+        deathDisplay.innerText = deaths;
+        
+        player.x = player.spawnX;
+        player.y = player.spawnY;
+        player.vx = 0;
+        player.vy = 0;
+        initStage();
+
+        setTimeout(() => { isResetting = false; }, 200);
+    }
+
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    const setTouch = (id, k) => {
+        const el = document.getElementById(id);
+        el.onpointerdown = (e) => { e.preventDefault(); keys[k] = true; };
+        el.onpointerup = (e) => { e.preventDefault(); keys[k] = false; };
+        el.onpointerleave = (e) => { e.preventDefault(); keys[k] = false; };
+    };
+    setTouch('btnLeft', 'ArrowLeft');
+    setTouch('btnRight', 'ArrowRight');
+    setTouch('btnJump', 'Space');
+
+    function update() {
+        if(isCleared) return;
+
+        // 관성 이동 로직
+        if (keys['ArrowLeft']) player.vx -= accel;
+        else if (keys['ArrowRight']) player.vx += accel;
+        else player.vx *= friction;
+
+        // 속도 제한
+        if (player.vx > maxSpeed) player.vx = maxSpeed;
+        if (player.vx < -maxSpeed) player.vx = -maxSpeed;
+
+        if ((keys['Space'] || keys['KeyW']) && player.grounded) {
+            player.vy = -11;
+            player.grounded = false;
+        }
+
+        player.vy += gravity;
+        player.x += player.vx;
+        player.y += player.vy;
+        player.grounded = false;
+
+        let targetX = player.x - canvas.width / 3;
+        cameraX += (targetX - cameraX) * 0.1;
+
+        platforms.forEach(p => {
+            if (p.hidden) return;
+
+            if (player.x < p.x + p.w && player.x + player.w > p.x &&
+                player.y + player.h > p.y && player.y < p.y + p.h) {
+                
+                if (player.vy > 0 && player.y + player.h - player.vy <= p.y) {
+                    player.y = p.y - player.h;
+                    player.vy = 0;
+                    player.grounded = true;
+
+                    // 부스트 발판: 밟으면 강제로 앞으로 튕겨나감
+                    if (p.type === 'boost') {
+                        player.vx = 12; 
+                    }
+
+                    if (p.type === 'disappear') setTimeout(() => p.hidden = true, 100);
+                    if (p.type === 'fake_goal' && !p.triggered) {
+                        p.triggered = true;
+                        setTimeout(() => { p.hidden = true; }, 150);
+                    }
+                    if (p.type === 'goal') clearStage();
+                }
+            }
+        });
+
+        if (player.y > canvas.height + 100 || player.x < cameraX - 100) resetPlayer();
+    }
+
+    function clearStage() {
+        if(isCleared) return;
+        isCleared = true;
+        msgDisplay.style.display = 'block';
+        msgDisplay.style.color = "#00FF00";
+        setTimeout(() => {
+            window.location.href = 'https://murang-korea.github.io/unfair/game_7.html';
+        }, 3000);
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(-Math.floor(cameraX), 0);
+
+        ctx.fillStyle = playerColor;
+        ctx.fillRect(player.x, player.y, player.w, player.h);
+
+        platforms.forEach(p => {
+            if (p.hidden) return;
+            
+            if (p.type === 'ice') ctx.fillStyle = "#aaccff";
+            else if (p.type === 'boost') ctx.fillStyle = "#ffff00";
+            else if (p.type === 'goal' || p.type === 'fake_goal') ctx.fillStyle = "#f33";
+            else ctx.fillStyle = "#555";
+            
+            ctx.fillRect(p.x, p.y, p.w, p.h);
+        });
+
+        ctx.restore();
+        requestAnimationFrame(() => { update(); draw(); });
+    }
+
+    initStage();
+    draw();
+</script>
+</body>
+</html>
