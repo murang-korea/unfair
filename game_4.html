@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Stage 4 - Physics Final</title>
+    <style>
+        body { margin: 0; padding: 0; background-color: #111; color: white; font-family: 'Courier New', monospace; overflow: hidden; touch-action: manipulation; }
+        canvas { display: block; background-color: #151515; }
+        #ui { position: absolute; top: 10px; left: 10px; z-index: 10; font-size: 18px; }
+        #msg { position: absolute; width: 100%; text-align: center; top: 45%; font-size: 24px; font-weight: bold; display: none; z-index: 10; text-shadow: 2px 2px #000; }
+        .controls { position: absolute; bottom: 20px; width: 100%; display: flex; justify-content: space-around; z-index: 10; pointer-events: none; }
+        .btn { width: 70px; height: 70px; background: rgba(255, 255, 255, 0.1); border: 1px solid white; display: flex; align-items: center; justify-content: center; pointer-events: auto; user-select: none; }
+    </style>
+</head>
+<body>
+
+    <div id="ui">Stage 4 | Deaths: <span id="deathCount">0</span></div>
+    <div id="msg">바람을 뚫고 가세요</div>
+    <canvas id="gameCanvas"></canvas>
+
+    <div class="controls">
+        <div id="btnLeft" class="btn">◀</div>
+        <div id="btnJump" class="btn">JUMP</div>
+        <div id="btnRight" class="btn">▶</div>
+    </div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const deathDisplay = document.getElementById('deathCount');
+    const msgDisplay = document.getElementById('msg');
+
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    let deaths = 0;
+    let isCleared = false;
+    let isResetting = false;
+    let windPower = 0.6; // 바람을 더 약하게 조정 (0.8 -> 0.6)
+    const gravity = 0.45;
+    const moveSpeed = 4.8; // 이동 속도 약간 상향
+    let cameraX = 0;
+    
+    const playerColor = localStorage.getItem('playerColor') || '#ffffff';
+
+    let player = {
+        x: 100, y: 300, w: 25, h: 25, vx: 0, vy: 0,
+        grounded: false,
+        spawnX: 100, spawnY: 300,
+        jumpForce: -11
+    };
+
+    let keys = {};
+    
+    // 스테이지 4 레이아웃 (도달 가능성 100% 보장 버전)
+    const stage4Layout = [
+        {x: 0, y: 450, w: 300, h: 40, type: 'normal'},
+        {x: 350, y: 400, w: 100, h: 20, type: 'high_jump'},  
+        {x: 550, y: 280, w: 40, h: 400, type: 'wall'},      
+        {x: 650, y: 350, w: 150, h: 20, type: 'normal'},    // 벽 넘어서 착지할 곳을 더 넓힘
+        {x: 900, y: 320, w: 100, h: 20, type: 'disappear'},
+        {x: 1100, y: 400, w: 120, h: 20, type: 'fake_goal'}, 
+        {x: 1350, y: 320, w: 250, h: 40, type: 'goal'}       // 진짜 골을 더 가깝게(1550->1350) 당기고 크게 만듦
+    ];
+
+    let platforms = [];
+
+    function initStage() {
+        platforms = stage4Layout.map(p => ({ ...p, hidden: false, triggering: false }));
+        player.jumpForce = -11;
+        cameraX = 0;
+    }
+
+    function resetPlayer() {
+        if(isCleared || isResetting) return;
+        isResetting = true;
+        deaths++;
+        deathDisplay.innerText = deaths;
+        
+        msgDisplay.innerText = "조금만 더 힘내세요!";
+        msgDisplay.style.display = 'block';
+
+        player.x = player.spawnX;
+        player.y = player.spawnY;
+        player.vx = 0;
+        player.vy = 0;
+        initStage();
+
+        setTimeout(() => {
+            msgDisplay.style.display = 'none';
+            isResetting = false;
+        }, 200);
+    }
+
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    const setTouch = (id, k) => {
+        const el = document.getElementById(id);
+        el.onpointerdown = (e) => { e.preventDefault(); keys[k] = true; };
+        el.onpointerup = (e) => { e.preventDefault(); keys[k] = false; };
+        el.onpointerleave = (e) => { e.preventDefault(); keys[k] = false; };
+    };
+    setTouch('btnLeft', 'ArrowLeft');
+    setTouch('btnRight', 'ArrowRight');
+    setTouch('btnJump', 'Space');
+
+    function update() {
+        if(isCleared) return;
+
+        if (keys['ArrowLeft']) player.vx = -moveSpeed;
+        else if (keys['ArrowRight']) player.vx = moveSpeed;
+        else player.vx *= 0.8;
+
+        // 바람 영향 (오른쪽으로 가려는 힘을 억제함)
+        player.x -= windPower;
+
+        if ((keys['Space'] || keys['KeyW']) && player.grounded) {
+            player.vy = player.jumpForce;
+            player.grounded = false;
+            player.jumpForce = -11; 
+        }
+
+        player.vy += gravity;
+        player.x += player.vx;
+        player.y += player.vy;
+        player.grounded = false;
+
+        // 카메라 추적 로직 개선
+        let targetX = player.x - canvas.width / 2.5;
+        cameraX += (targetX - cameraX) * 0.1;
+        if(cameraX < 0) cameraX = 0;
+
+        platforms.forEach(p => {
+            if (p.hidden) return;
+
+            if (player.x < p.x + p.w && player.x + player.w > p.x &&
+                player.y + player.h > p.y && player.y < p.y + p.h) {
+                
+                // 벽 충돌 (옆면)
+                if (p.type === 'wall') {
+                    if (player.vx > 0 && player.x + player.w - player.vx <= p.x) player.x = p.x - player.w;
+                    else if (player.vx < 0 && player.x - player.vx >= p.x + p.w) player.x = p.x + p.w;
+                }
+
+                // 바닥 착지 (상단)
+                if (player.vy > 0 && player.y + player.h - player.vy <= p.y) {
+                    player.y = p.y - player.h;
+                    player.vy = 0;
+                    player.grounded = true;
+
+                    if (p.type === 'high_jump') {
+                        player.jumpForce = -18; 
+                        msgDisplay.innerText = "점프력 강화!";
+                        msgDisplay.style.display = 'block';
+                        setTimeout(() => msgDisplay.style.display = 'none', 500);
+                    }
+                    
+                    if (p.type === 'fake_goal' && !p.triggering) {
+                        p.triggering = true;
+                        setTimeout(() => { p.hidden = true; }, 200);
+                    }
+
+                    if (p.type === 'disappear') setTimeout(() => p.hidden = true, 200);
+                    if (p.type === 'goal') clearStage();
+                }
+            }
+        });
+
+        // 사망 판정 (추락하거나 화면 왼쪽으로 너무 밀려나면)
+        if (player.y > canvas.height + 100 || player.x < cameraX - 50) resetPlayer();
+    }
+
+    function clearStage() {
+        if(isCleared) return;
+        isCleared = true;
+        msgDisplay.innerText = "STAGE 4 CLEAR!";
+        msgDisplay.style.display = 'block';
+        msgDisplay.style.color = "#00ff00";
+        setTimeout(() => {
+            window.location.href = 'https://murang-korea.github.io/unfair/game_5.html';
+        }, 2500);
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.save();
+        ctx.translate(-Math.floor(cameraX), 0);
+
+        ctx.fillStyle = playerColor;
+        ctx.fillRect(player.x, player.y, player.w, player.h);
+
+        platforms.forEach(p => {
+            if (p.hidden) return;
+            if (p.type === 'goal' || p.type === 'fake_goal') ctx.fillStyle = "#ff4444";
+            else if (p.type === 'high_jump') ctx.fillStyle = "#00ff00";
+            else if (p.type === 'wall') ctx.fillStyle = "#555";
+            else ctx.fillStyle = "#777";
+            ctx.fillRect(p.x, p.y, p.w, p.h);
+        });
+
+        ctx.restore();
+        requestAnimationFrame(() => { update(); draw(); });
+    }
+
+    initStage();
+    draw();
+</script>
+</body>
+</html>
