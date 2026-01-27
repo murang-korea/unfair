@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Stage 13 - Gravity Leap</title>
+    <style>
+        body { margin: 0; padding: 0; background-color: #000; color: #fff; font-family: 'Courier New', monospace; overflow: hidden; touch-action: manipulation; }
+        canvas { display: block; background-color: #0a0a15; }
+        #ui { position: absolute; top: 10px; left: 10px; z-index: 10; font-size: 18px; color: #55aaff; }
+        #msg { position: absolute; width: 100%; text-align: center; top: 40%; font-size: 32px; font-weight: bold; display: none; z-index: 10; text-shadow: 0 0 10px #55aaff; }
+        .controls { position: absolute; bottom: 20px; width: 100%; display: flex; justify-content: space-around; z-index: 10; pointer-events: none; }
+        .btn { width: 70px; height: 70px; background: rgba(85, 170, 255, 0.2); border: 2px solid #55aaff; display: flex; align-items: center; justify-content: center; pointer-events: auto; user-select: none; color: #fff; font-weight: bold; border-radius: 50%; }
+    </style>
+</head>
+<body>
+
+    <div id="ui">Stage 13 | GRAVITY: <span id="gravVal">100</span>% | Deaths: <span id="deathCount">0</span></div>
+    <div id="msg">STAGE 13 CLEAR!</div>
+    <canvas id="gameCanvas"></canvas>
+
+    <div class="controls">
+        <div id="btnLeft" class="btn">◀</div>
+        <div id="btnJump" class="btn">JUMP</div>
+        <div id="btnRight" class="btn">▶</div>
+    </div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const deathDisplay = document.getElementById('deathCount');
+    const gravDisplay = document.getElementById('gravVal');
+    const msgDisplay = document.getElementById('msg');
+
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    let deaths = 0;
+    let isCleared = false;
+    let isResetting = false;
+    
+    let currentGravity = 0.45;
+    const baseGravity = 0.45;
+    const lowGravity = 0.22; // 점프 중 길게 누르면 중력 감소
+    const moveSpeed = 5;
+    let cameraX = 0;
+    
+    const playerColor = localStorage.getItem('playerColor') || '#ffffff';
+
+    let player = {
+        x: 100, y: 300, w: 25, h: 25, vx: 0, vy: 0,
+        grounded: false, spawnX: 100, spawnY: 300
+    };
+
+    let keys = {};
+    
+    // 확실히 밟을 수 있는 간격으로 재배치된 맵
+    const stage13Layout = [
+        {x: 0, y: 450, w: 200, h: 40, type: 'normal'},
+        {x: 350, y: 380, w: 100, h: 20, type: 'normal'},
+        {x: 600, y: 300, w: 100, h: 20, type: 'booster'}, // 밟으면 점프력 강화
+        {x: 900, y: 420, w: 100, h: 20, type: 'normal'},
+        {x: 1200, y: 320, w: 80, h: 20, type: 'moving'}, // 좌우로 움직임
+        {x: 1550, y: 380, w: 200, h: 20, type: 'goal'}
+    ];
+
+    let platforms = [];
+
+    function initStage() {
+        platforms = stage13Layout.map(p => ({ 
+            ...p, originalX: p.x, originalY: p.y, triggered: false 
+        }));
+    }
+
+    function resetPlayer() {
+        if(isCleared || isResetting) return;
+        isResetting = true;
+        deaths++;
+        deathDisplay.innerText = deaths;
+        player.x = player.spawnX;
+        player.y = player.spawnY;
+        player.vx = 0; player.vy = 0;
+        initStage();
+        setTimeout(() => { isResetting = false; }, 200);
+    }
+
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    const setTouch = (id, k) => {
+        const el = document.getElementById(id);
+        el.onpointerdown = (e) => { e.preventDefault(); keys[k] = true; };
+        el.onpointerup = (e) => { e.preventDefault(); keys[k] = false; };
+        el.onpointerleave = (e) => { e.preventDefault(); keys[k] = false; };
+    };
+    setTouch('btnLeft', 'ArrowLeft');
+    setTouch('btnRight', 'ArrowRight');
+    setTouch('btnJump', 'Space');
+
+    function update() {
+        if(isCleared) return;
+
+        // 좌우 이동
+        if (keys['ArrowLeft']) player.vx = -moveSpeed;
+        else if (keys['ArrowRight']) player.vx = moveSpeed;
+        else player.vx *= 0.8;
+
+        // 점프 기믹: 점프 키를 누르고 있으면 중력이 약해져 더 멀리/높이 날아감
+        if (keys['Space'] || keys['KeyW']) {
+            if (player.grounded) {
+                player.vy = -10.5;
+                player.grounded = false;
+            }
+            currentGravity = lowGravity;
+            gravDisplay.innerText = "50";
+        } else {
+            currentGravity = baseGravity;
+            gravDisplay.innerText = "100";
+        }
+
+        player.vy += currentGravity;
+        player.x += player.vx;
+        player.y += player.vy;
+        player.grounded = false;
+
+        cameraX += (player.x - canvas.width / 3 - cameraX) * 0.1;
+
+        platforms.forEach(p => {
+            if (p.type === 'moving') {
+                p.x = p.originalX + Math.sin(Date.now() / 500) * 100;
+            }
+
+            if (player.x < p.x + p.w && player.x + player.w > p.x &&
+                player.y < p.y + p.h && player.y + player.h > p.y) {
+                
+                if (player.vy > 0 && player.y + player.h - player.vy <= p.y) {
+                    player.y = p.y - player.h;
+                    player.vy = 0;
+                    player.grounded = true;
+
+                    if (p.type === 'booster') {
+                        player.vy = -15; // 슈퍼 점프
+                        player.grounded = false;
+                    }
+                    if (p.type === 'goal') clearStage();
+                }
+            }
+        });
+
+        if (player.y > canvas.height + 100 || player.x < cameraX - 200) resetPlayer();
+    }
+
+    function clearStage() {
+        if(isCleared) return;
+        isCleared = true;
+        msgDisplay.style.display = 'block';
+        setTimeout(() => {
+            window.location.href = 'https://murang-korea.github.io/unfair/game_14.html';
+        }, 3000);
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(-Math.floor(cameraX), 0);
+
+        // 플레이어 (중력 상태에 따라 잔상 효과)
+        if (currentGravity === lowGravity && !player.grounded) {
+            ctx.fillStyle = "rgba(85, 170, 255, 0.4)";
+            ctx.fillRect(player.x - player.vx, player.y - player.vy, player.w, player.h);
+        }
+        ctx.fillStyle = playerColor;
+        ctx.fillRect(player.x, player.y, player.w, player.h);
+
+        // 발판
+        platforms.forEach(p => {
+            if (p.type === 'booster') ctx.fillStyle = "#ffaa00";
+            else if (p.type === 'moving') ctx.fillStyle = "#aaff00";
+            else if (p.type === 'goal') ctx.fillStyle = "#00ffaa";
+            else ctx.fillStyle = "#334466";
+            
+            ctx.fillRect(p.x, p.y, p.w, p.h);
+            ctx.strokeStyle = "#fff";
+            ctx.strokeRect(p.x, p.y, p.w, p.h);
+        });
+
+        ctx.restore();
+        requestAnimationFrame(() => { update(); draw(); });
+    }
+
+    initStage();
+    draw();
+</script>
+</body>
+</html>
