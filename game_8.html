@@ -3,27 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Stage 8 - Lights Out</title>
+    <title>Stage 8 - Into the Dark</title>
     <style>
         body { margin: 0; padding: 0; background-color: #000; color: white; font-family: 'Courier New', monospace; overflow: hidden; touch-action: manipulation; }
-        canvas { display: block; background-color: #050505; }
+        canvas { display: block; background-color: #000; }
         #ui { position: absolute; top: 10px; left: 10px; z-index: 10; font-size: 18px; }
-        #msg { position: absolute; width: 100%; text-align: center; top: 40%; font-size: 32px; font-weight: bold; display: none; z-index: 10; text-shadow: 2px 2px #000; }
+        #msg { position: absolute; width: 100%; text-align: center; top: 40%; font-size: 24px; font-weight: bold; display: none; z-index: 10; text-shadow: 2px 2px #f00; }
         .controls { position: absolute; bottom: 20px; width: 100%; display: flex; justify-content: space-around; z-index: 10; pointer-events: none; }
-        .btn { width: 70px; height: 70px; background: rgba(255, 255, 255, 0.05); border: 1px solid #444; display: flex; align-items: center; justify-content: center; pointer-events: auto; user-select: none; color: #888; }
+        .btn { width: 70px; height: 70px; background: rgba(255, 255, 255, 0.1); border: 1px solid white; display: flex; align-items: center; justify-content: center; pointer-events: auto; user-select: none; }
     </style>
 </head>
 <body>
+<div id="ui">Stage 8 | Deaths: <span id="deathCount">0</span></div>
+<div id="msg">앞이 보이나요?</div>
+<canvas id="gameCanvas"></canvas>
 
-    <div id="ui">Stage 8 | Deaths: <span id="deathCount">0</span></div>
-    <div id="msg">STAGE 8 CLEAR!</div>
-    <canvas id="gameCanvas"></canvas>
-
-    <div class="controls">
-        <div id="btnLeft" class="btn">◀</div>
-        <div id="btnJump" class="btn">JUMP</div>
-        <div id="btnRight" class="btn">▶</div>
-    </div>
+<div class="controls">
+    <div id="btnLeft" class="btn">◀</div>
+    <div id="btnJump" class="btn">JUMP</div>
+    <div id="btnRight" class="btn">▶</div>
+</div>
 
 <script>
     const canvas = document.getElementById('gameCanvas');
@@ -44,32 +43,33 @@
     const gravity = 0.45;
     const moveSpeed = 4.5;
     let cameraX = 0;
-    
+
     const playerColor = localStorage.getItem('playerColor') || '#ffffff';
 
     let player = {
-        x: 100, y: 300, w: 25, h: 25, vx: 0, vy: 0,
-        grounded: false,
-        spawnX: 100, spawnY: 300
+        x: 50, y: 400, w: 25, h: 25, vx: 0, vy: 0,
+        grounded: false, spawnX: 50, spawnY: 400
     };
 
     let keys = {};
-    
-    // 스테이지 8 레이아웃
+
+    // 스테이지 8 레이아웃: 점프 가능한 간격으로 재배치
     const stage8Layout = [
-        {x: 0, y: 450, w: 250, h: 40, type: 'normal'},
-        {x: 350, y: 380, w: 80, h: 20, type: 'moving'}, // 밟으면 위아래로 움직임
-        {x: 550, y: 320, w: 80, h: 20, type: 'normal'},
-        {x: 750, y: 400, w: 100, h: 20, type: 'disappear'},
-        {x: 950, y: 300, w: 80, h: 20, type: 'normal'},
-        {x: 1150, y: 380, w: 60, h: 20, type: 'fake_goal'},
-        {x: 1400, y: 350, w: 200, h: 20, type: 'goal'}
+        {x: 0, y: 450, w: 200, h: 40, type: 'normal'},
+        {x: 300, y: 400, w: 100, h: 20, type: 'normal'},
+        {x: 500, y: 320, w: 100, h: 20, type: 'disappear'},
+        {x: 650, y: 320, w: 100, h: 20, type: 'trap'}, // 밟으면 잠깐 암전
+        {x: 850, y: 400, w: 120, h: 20, type: 'normal'},
+        {x: 1050, y: 350, w: 80, h: 20, type: 'slippery'},
+        {x: 1250, y: 300, w: 150, h: 20, type: 'goal'}
     ];
 
     let platforms = [];
+    let flashRadius = 150; // 손전등 반지름
 
     function initStage() {
-        platforms = stage8Layout.map(p => ({ ...p, hidden: false, triggered: false, startY: p.y, offset: 0 }));
+        platforms = stage8Layout.map(p => ({ ...p, hidden: false }));
+        cameraX = 0;
     }
 
     function resetPlayer() {
@@ -77,14 +77,12 @@
         isResetting = true;
         deaths++;
         deathDisplay.innerText = deaths;
-        
         player.x = player.spawnX;
         player.y = player.spawnY;
         player.vx = 0;
         player.vy = 0;
         initStage();
-
-        setTimeout(() => { isResetting = false; }, 200);
+        setTimeout(() => { msgDisplay.style.display = 'none'; isResetting = false; }, 200);
     }
 
     window.addEventListener('keydown', e => keys[e.code] = true);
@@ -94,7 +92,6 @@
         const el = document.getElementById(id);
         el.onpointerdown = (e) => { e.preventDefault(); keys[k] = true; };
         el.onpointerup = (e) => { e.preventDefault(); keys[k] = false; };
-        el.onpointerleave = (e) => { e.preventDefault(); keys[k] = false; };
     };
     setTouch('btnLeft', 'ArrowLeft');
     setTouch('btnRight', 'ArrowRight');
@@ -107,7 +104,7 @@
         else if (keys['ArrowRight']) player.vx = moveSpeed;
         else player.vx *= 0.8;
 
-        if ((keys['Space'] || keys['KeyW']) && player.grounded) {
+        if (keys['Space'] && player.grounded) {
             player.vy = -11;
             player.grounded = false;
         }
@@ -121,25 +118,20 @@
         cameraX += (targetX - cameraX) * 0.1;
 
         platforms.forEach(p => {
-            if (p.type === 'moving') {
-                p.offset += 0.05;
-                p.y = p.startY + Math.sin(p.offset) * 50;
-            }
-
             if (p.hidden) return;
 
             if (player.x < p.x + p.w && player.x + player.w > p.x &&
-                player.y + player.h > p.y && player.y < p.y + p.h) {
+                player.y < p.y + p.h && player.y + player.h > p.y) {
                 
                 if (player.vy > 0 && player.y + player.h - player.vy <= p.y) {
                     player.y = p.y - player.h;
                     player.vy = 0;
                     player.grounded = true;
 
-                    if (p.type === 'disappear') setTimeout(() => p.hidden = true, 150);
-                    if (p.type === 'fake_goal' && !p.triggered) {
-                        p.triggered = true;
-                        setTimeout(() => { p.hidden = true; }, 200);
+                    if (p.type === 'disappear') setTimeout(() => p.hidden = true, 200);
+                    if (p.type === 'trap') {
+                        flashRadius = 0; // 암전 억까
+                        setTimeout(() => flashRadius = 150, 1000);
                     }
                     if (p.type === 'goal') clearStage();
                 }
@@ -152,39 +144,44 @@
     function clearStage() {
         if(isCleared) return;
         isCleared = true;
+        msgDisplay.innerText = "STAGE 8 CLEAR!";
         msgDisplay.style.display = 'block';
-        msgDisplay.style.color = "#00FF00";
+        msgDisplay.style.color = "#00ff00";
         setTimeout(() => {
             window.location.href = 'https://murang-korea.github.io/unfair/game_9.html';
         }, 3000);
     }
 
     function draw() {
+        // 1. 전체 배경 검은색 (이미 처리됨)
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        // 1. 카메라 뷰 적용하여 게임 요소 그리기
         ctx.save();
         ctx.translate(-Math.floor(cameraX), 0);
 
+        // 2. 플랫폼과 플레이어 그리기
+        ctx.fillStyle = playerColor;
+        ctx.fillRect(player.x, player.y, player.w, player.h);
+
         platforms.forEach(p => {
             if (p.hidden) return;
-            ctx.fillStyle = (p.type === 'goal' || p.type === 'fake_goal') ? "#f33" : "#444";
+            if (p.type === 'goal') ctx.fillStyle = "#ff4444";
+            else if (p.type === 'trap') ctx.fillStyle = "#8844ff";
+            else ctx.fillStyle = "#444";
             ctx.fillRect(p.x, p.y, p.w, p.h);
         });
 
-        ctx.fillStyle = playerColor;
-        ctx.fillRect(player.x, player.y, player.w, player.h);
         ctx.restore();
 
-        // 2. 라이트 아웃 효과 (어둠 덮기)
+        // 3. 손전등 효과 (Masking)
         ctx.save();
         ctx.globalCompositeOperation = 'destination-in';
         const grad = ctx.createRadialGradient(
-            player.x - cameraX + player.w/2, player.y + player.h/2, 20, 
-            player.x - cameraX + player.w/2, player.y + player.h/2, 150
+            player.x - cameraX + player.w/2, player.y + player.h/2, 0,
+            player.x - cameraX + player.w/2, player.y + player.h/2, flashRadius
         );
-        grad.addColorStop(0, 'rgba(0, 0, 0, 1)');
-        grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        grad.addColorStop(0, 'rgba(0,0,0,1)');
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.restore();
