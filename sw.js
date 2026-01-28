@@ -1,53 +1,56 @@
-const CACHE_NAME = 'unfair-parkour-v1';
+const CACHE_NAME = 'unfair-cache-v1';
 
+// ❗ 최소 필수만 precache
 const CORE_ASSETS = [
-  './',
-  './main.html',
-  './manifest.json',
-  './game_1.html',
-  './game_2.html',
-  './game_3.html',
-  './game_4.html',
-  './game_5.html',
-  './game_6.html',
-  './game_7.html',
-  './game_8.html',
-  './game_9.html',
-  './game_10.html',
-  './game_11.html',
-  './game_12.html',
-  './game_13.html',
-  './stage.html',
-  './skins.html'
+  '/unfair/main.html',
+  '/unfair/manifest.json',
+  '/unfair/icon-192.png',
+  '/unfair/icon-512.png'
 ];
 
-self.addEventListener('install', e => {
-  e.waitUntil(
-    caches.open(CACHE_NAME).then(c => c.addAll(CORE_ASSETS))
+// install
+self.addEventListener('install', event => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(cache => cache.addAll(CORE_ASSETS))
   );
   self.skipWaiting();
 });
 
-self.addEventListener('activate', e => {
-  e.waitUntil(
+// activate
+self.addEventListener('activate', event => {
+  event.waitUntil(
     caches.keys().then(keys =>
       Promise.all(
-        keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
+        keys.filter(key => key !== CACHE_NAME)
+            .map(key => caches.delete(key))
       )
     )
   );
   self.clients.claim();
 });
 
-self.addEventListener("fetch", event => {
+// fetch (런타임 캐시)
+self.addEventListener('fetch', event => {
+  if (event.request.method !== 'GET') return;
+
   event.respondWith(
-    caches.open("v1").then(cache =>
-      cache.match(event.request).then(res =>
-        res || fetch(event.request).then(net => {
-          cache.put(event.request, net.clone());
-          return net;
-        })
-      )
-    )
+    caches.match(event.request).then(cached => {
+      if (cached) return cached;
+
+      return fetch(event.request)
+        .then(response => {
+          // HTML / 이미지 / JS만 캐시
+          if (
+            response.status === 200 &&
+            event.request.url.startsWith(self.location.origin)
+          ) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then(cache => {
+              cache.put(event.request, copy);
+            });
+          }
+          return response;
+        });
+    })
   );
 });
