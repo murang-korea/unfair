@@ -3,27 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Stage 6 - Inertia Hell</title>
+    <title>Stage 6 - Time-Sync Prison</title>
     <style>
         body { margin: 0; padding: 0; background-color: #050505; color: white; font-family: 'Courier New', monospace; overflow: hidden; touch-action: manipulation; }
-        canvas { display: block; background-color: #0a0a15; }
+        canvas { display: block; background-color: #0d0d0d; }
         #ui { position: absolute; top: 10px; left: 10px; z-index: 10; font-size: 18px; }
-        #msg { position: absolute; width: 100%; text-align: center; top: 40%; font-size: 32px; font-weight: bold; display: none; z-index: 10; text-shadow: 2px 2px #000; }
+        #msg { position: absolute; width: 100%; text-align: center; top: 45%; font-size: 24px; font-weight: bold; display: none; z-index: 10; text-shadow: 2px 2px #f00; }
         .controls { position: absolute; bottom: 20px; width: 100%; display: flex; justify-content: space-around; z-index: 10; pointer-events: none; }
-        .btn { width: 70px; height: 70px; background: rgba(255, 255, 255, 0.05); border: 1px solid #446; display: flex; align-items: center; justify-content: center; pointer-events: auto; user-select: none; color: #fff;}
+        .btn { width: 70px; height: 70px; background: rgba(255, 255, 255, 0.1); border: 1px solid white; display: flex; align-items: center; justify-content: center; pointer-events: auto; user-select: none; }
     </style>
 </head>
 <body>
+<div id="ui">Stage 6 | Deaths: <span id="deathCount">0</span></div>
+<div id="msg">여긴 좀 빠를 겁니다</div>
+<canvas id="gameCanvas"></canvas>
 
-    <div id="ui">Stage 6 | Deaths: <span id="deathCount">0</span></div>
-    <div id="msg">STAGE 6 CLEAR!</div>
-    <canvas id="gameCanvas"></canvas>
-
-    <div class="controls">
-        <div id="btnLeft" class="btn">◀</div>
-        <div id="btnJump" class="btn">JUMP</div>
-        <div id="btnRight" class="btn">▶</div>
-    </div>
+<div class="controls">
+    <div id="btnLeft" class="btn">◀</div>
+    <div id="btnJump" class="btn">JUMP</div>
+    <div id="btnRight" class="btn">▶</div>
+</div>
 
 <script>
     const canvas = document.getElementById('gameCanvas');
@@ -41,39 +40,38 @@
     let deaths = 0;
     let isCleared = false;
     let isResetting = false;
-    const gravity = 0.45;
-    let friction = 0.98; // 기본 마찰력 (미끄러움)
-    const accel = 0.5;
-    const maxSpeed = 6;
+    const gravity = 0.5;
+    const moveSpeed = 5;
     let cameraX = 0;
-    
+    let frameCount = 0;
+
     const playerColor = localStorage.getItem('playerColor') || '#ffffff';
 
     let player = {
-        x: 100, y: 300, w: 25, h: 25, vx: 0, vy: 0,
-        grounded: false,
-        spawnX: 100, spawnY: 300
+        x: 50, y: 400, w: 25, h: 25, vx: 0, vy: 0,
+        grounded: false, spawnX: 50, spawnY: 400
     };
 
     let keys = {};
-    
-    // 스테이지 6 레이아웃: "멈출 수 없는 질주"
+
+    // 스테이지 6 레이아웃: "움직이는 레이저와 추격"
     const stage6Layout = [
-        {x: 0, y: 450, w: 400, h: 40, type: 'ice'},         // 매우 미끄러운 시작점
-        {x: 500, y: 400, w: 100, h: 20, type: 'boost'},     // 밟으면 강제 가속
-        {x: 750, y: 300, w: 80, h: 20, type: 'ice'},
-        {x: 950, y: 350, w: 50, h: 20, type: 'disappear'},  
-        {x: 1100, y: 250, w: 120, h: 20, type: 'ice'},
-        {x: 1300, y: 400, w: 100, h: 20, type: 'fake_goal'},
-        {x: 1500, y: 350, w: 200, h: 20, type: 'goal'}
+        {x: 0, y: 450, w: 200, h: 40, type: 'normal'},
+        {x: 300, y: 380, w: 120, h: 20, type: 'moving', range: 100, speed: 2, dir: 1, originX: 300}, 
+        {x: 550, y: 320, w: 80, h: 20, type: 'blink'}, // 일정 시간마다 사라짐
+        {x: 750, y: 400, w: 100, h: 20, type: 'normal'},
+        {x: 950, y: 300, w: 20, h: 150, type: 'laser'}, // 닿으면 즉사하는 레이저
+        {x: 1100, y: 420, w: 150, h: 20, type: 'fragile'}, // 밟으면 바로 떨어짐
+        {x: 1350, y: 350, w: 100, h: 20, type: 'normal'},
+        {x: 1550, y: 300, w: 150, h: 20, type: 'goal'}
     ];
 
     let platforms = [];
 
     function initStage() {
-        platforms = stage6Layout.map(p => ({ ...p, hidden: false, triggered: false }));
-        player.vx = 0;
-        player.vy = 0;
+        platforms = stage6Layout.map(p => ({ ...p, hidden: false, timer: 0 }));
+        cameraX = 0;
+        frameCount = 0;
     }
 
     function resetPlayer() {
@@ -81,14 +79,12 @@
         isResetting = true;
         deaths++;
         deathDisplay.innerText = deaths;
-        
         player.x = player.spawnX;
         player.y = player.spawnY;
         player.vx = 0;
         player.vy = 0;
         initStage();
-
-        setTimeout(() => { isResetting = false; }, 200);
+        setTimeout(() => { msgDisplay.style.display = 'none'; isResetting = false; }, 200);
     }
 
     window.addEventListener('keydown', e => keys[e.code] = true);
@@ -98,7 +94,6 @@
         const el = document.getElementById(id);
         el.onpointerdown = (e) => { e.preventDefault(); keys[k] = true; };
         el.onpointerup = (e) => { e.preventDefault(); keys[k] = false; };
-        el.onpointerleave = (e) => { e.preventDefault(); keys[k] = false; };
     };
     setTouch('btnLeft', 'ArrowLeft');
     setTouch('btnRight', 'ArrowRight');
@@ -106,18 +101,14 @@
 
     function update() {
         if(isCleared) return;
+        frameCount++;
 
-        // 관성 이동 로직
-        if (keys['ArrowLeft']) player.vx -= accel;
-        else if (keys['ArrowRight']) player.vx += accel;
-        else player.vx *= friction;
-
-        // 속도 제한
-        if (player.vx > maxSpeed) player.vx = maxSpeed;
-        if (player.vx < -maxSpeed) player.vx = -maxSpeed;
+        if (keys['ArrowLeft']) player.vx = -moveSpeed;
+        else if (keys['ArrowRight']) player.vx = moveSpeed;
+        else player.vx *= 0.8;
 
         if ((keys['Space'] || keys['KeyW']) && player.grounded) {
-            player.vy = -11;
+            player.vy = -12;
             player.grounded = false;
         }
 
@@ -126,31 +117,44 @@
         player.y += player.vy;
         player.grounded = false;
 
-        let targetX = player.x - canvas.width / 3;
-        cameraX += (targetX - cameraX) * 0.1;
+        let targetX = player.x - canvas.width / 4;
+        cameraX += (targetX - cameraX) * 0.08;
 
         platforms.forEach(p => {
+            // 움직이는 발판 로직
+            if (p.type === 'moving') {
+                p.x += p.speed * p.dir;
+                if (Math.abs(p.x - p.originX) > p.range) p.dir *= -1;
+            }
+            // 깜빡이는 발판 로직
+            if (p.type === 'blink') {
+                p.hidden = Math.floor(frameCount / 60) % 2 === 0;
+            }
+
             if (p.hidden) return;
 
+            // 충돌 감지
             if (player.x < p.x + p.w && player.x + player.w > p.x &&
-                player.y + player.h > p.y && player.y < p.y + p.h) {
+                player.y < p.y + p.h && player.y + player.h > p.y) {
                 
+                // 레이저 충돌 (즉사)
+                if (p.type === 'laser') {
+                    resetPlayer();
+                    return;
+                }
+
                 if (player.vy > 0 && player.y + player.h - player.vy <= p.y) {
                     player.y = p.y - player.h;
                     player.vy = 0;
                     player.grounded = true;
 
-                    // 부스트 발판: 밟으면 강제로 앞으로 튕겨나감
-                    if (p.type === 'boost') {
-                        player.vx = 12; 
-                    }
-
-                    if (p.type === 'disappear') setTimeout(() => p.hidden = true, 100);
-                    if (p.type === 'fake_goal' && !p.triggered) {
-                        p.triggered = true;
-                        setTimeout(() => { p.hidden = true; }, 150);
+                    if (p.type === 'fragile') {
+                        setTimeout(() => p.hidden = true, 100);
                     }
                     if (p.type === 'goal') clearStage();
+                    
+                    // 움직이는 발판 위에 있을 때 같이 이동
+                    if (p.type === 'moving') player.x += p.speed * p.dir;
                 }
             }
         });
@@ -161,8 +165,9 @@
     function clearStage() {
         if(isCleared) return;
         isCleared = true;
+        msgDisplay.innerText = "STAGE 6 CLEAR!";
         msgDisplay.style.display = 'block';
-        msgDisplay.style.color = "#00FF00";
+        msgDisplay.style.color = "#ffff00";
         setTimeout(() => {
             window.location.href = 'https://murang-korea.github.io/unfair/game_7.html';
         }, 3000);
@@ -173,18 +178,27 @@
         ctx.save();
         ctx.translate(-Math.floor(cameraX), 0);
 
+        // 플레이어
         ctx.fillStyle = playerColor;
         ctx.fillRect(player.x, player.y, player.w, player.h);
 
+        // 발판들
         platforms.forEach(p => {
             if (p.hidden) return;
-            
-            if (p.type === 'ice') ctx.fillStyle = "#aaccff";
-            else if (p.type === 'boost') ctx.fillStyle = "#ffff00";
-            else if (p.type === 'goal' || p.type === 'fake_goal') ctx.fillStyle = "#f33";
+            if (p.type === 'goal') ctx.fillStyle = "#ff4444";
+            else if (p.type === 'laser') ctx.fillStyle = "#ff00ff";
+            else if (p.type === 'moving') ctx.fillStyle = "#44ff44";
+            else if (p.type === 'blink') ctx.fillStyle = "#4444ff";
+            else if (p.type === 'fragile') ctx.fillStyle = "#f39c12";
             else ctx.fillStyle = "#555";
             
             ctx.fillRect(p.x, p.y, p.w, p.h);
+            
+            // 레이저 효과
+            if (p.type === 'laser') {
+                ctx.strokeStyle = "#fff";
+                ctx.strokeRect(p.x, p.y, p.w, p.h);
+            }
         });
 
         ctx.restore();
