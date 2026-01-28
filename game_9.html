@@ -3,34 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Stage 9 - Dimension Glitch</title>
+    <title>Stage 9 - Time Distortion</title>
     <style>
-        body { margin: 0; padding: 0; background-color: #000; color: #0f0; font-family: 'Courier New', monospace; overflow: hidden; touch-action: manipulation; }
-        canvas { display: block; background-color: #050805; }
-        #ui { position: absolute; top: 10px; left: 10px; z-index: 10; font-size: 18px; text-shadow: 0 0 5px #0f0; }
-        #msg { position: absolute; width: 100%; text-align: center; top: 40%; font-size: 32px; font-weight: bold; display: none; z-index: 10; text-shadow: 0 0 10px #0f0; }
+        body { margin: 0; padding: 0; background-color: #0b0b15; color: white; font-family: 'Courier New', monospace; overflow: hidden; touch-action: manipulation; }
+        canvas { display: block; background-color: #111122; }
+        #ui { position: absolute; top: 10px; left: 10px; z-index: 10; font-size: 18px; }
+        #msg { position: absolute; width: 100%; text-align: center; top: 40%; font-size: 24px; font-weight: bold; display: none; z-index: 10; text-shadow: 2px 2px #000; }
         .controls { position: absolute; bottom: 20px; width: 100%; display: flex; justify-content: space-around; z-index: 10; pointer-events: none; }
-        .btn { width: 70px; height: 70px; background: rgba(0, 255, 0, 0.05); border: 1px solid #0f0; display: flex; align-items: center; justify-content: center; pointer-events: auto; user-select: none; color: #0f0; }
-        /* 글리치 효과 */
-        .glitch { animation: scan 0.2s infinite; opacity: 0.8; }
-        @keyframes scan {
-            0% { transform: translate(2px, 1px); }
-            50% { transform: translate(-2px, -1px); filter: hue-rotate(90deg); }
-            100% { transform: translate(0, 0); }
-        }
+        .btn { width: 70px; height: 70px; background: rgba(255, 255, 255, 0.1); border: 1px solid white; display: flex; align-items: center; justify-content: center; pointer-events: auto; user-select: none; }
+        /* 시간 왜곡 시각 효과 */
+        .time-warp { filter: hue-rotate(90deg) contrast(1.2); }
     </style>
 </head>
 <body>
+<div id="ui">Stage 9 | Deaths: <span id="deathCount">0</span></div>
+<div id="msg">시간이 꼬이고 있습니다</div>
+<canvas id="gameCanvas"></canvas>
 
-    <div id="ui" class="glitch">ERROR_CODE: <span id="deathCount">0</span> | ADDR: 0x9F32</div>
-    <div id="msg">STAGE 9 CLEAR!</div>
-    <canvas id="gameCanvas"></canvas>
-
-    <div class="controls">
-        <div id="btnLeft" class="btn">◀</div>
-        <div id="btnJump" class="btn">JUMP</div>
-        <div id="btnRight" class="btn">▶</div>
-    </div>
+<div class="controls">
+    <div id="btnLeft" class="btn">◀</div>
+    <div id="btnJump" class="btn">JUMP</div>
+    <div id="btnRight" class="btn">▶</div>
+</div>
 
 <script>
     const canvas = document.getElementById('gameCanvas');
@@ -48,66 +42,60 @@
     let deaths = 0;
     let isCleared = false;
     let isResetting = false;
-    const gravity = 0.45;
-    const moveSpeed = 4.5;
+    let timeScale = 1.0; // 시간 배율 (1.0이 정상)
     let cameraX = 0;
-    let frameCount = 0;
     
+    const baseGravity = 0.45;
+    const baseMoveSpeed = 4.5;
     const playerColor = localStorage.getItem('playerColor') || '#ffffff';
-    let ghostPositions = []; // 잔상 효과용
 
     let player = {
-        x: 100, y: 300, w: 25, h: 25, vx: 0, vy: 0,
-        grounded: false,
-        spawnX: 100, spawnY: 300
+        x: 80, y: 400, w: 25, h: 25, vx: 0, vy: 0,
+        grounded: false, spawnX: 80, spawnY: 400
     };
 
     let keys = {};
-    
-    // 스테이지 9 레이아웃: "데이터 오염"
+
+    // 스테이지 9 레이아웃: 시간 왜곡 구역 포함
     const stage9Layout = [
-        {x: 0, y: 450, w: 200, h: 40, type: 'normal'},
-        {x: 300, y: 400, w: 100, h: 20, type: 'glitch_pos'}, // 시각적 위치와 실제 위치가 계속 변함
-        {x: 500, y: 300, w: 80, h: 20, type: 'normal'},
-        {x: 700, y: 450, w: 120, h: 20, type: 'invisible_trigger'}, // 밟으면 갑자기 위에서 발판이 떨어짐
-        {x: 900, y: 250, w: 100, h: 20, type: 'normal'},
-        {x: 1100, y: 350, w: 80, h: 20, type: 'fake_goal'},
-        {x: 1350, y: 350, w: 200, h: 20, type: 'goal'}
+        {x: 0, y: 500, w: 250, h: 40, type: 'normal'},
+        {x: 350, y: 420, w: 120, h: 20, type: 'slow_mo'},   // 밟으면 3초간 슬로우 모션
+        {x: 550, y: 420, w: 100, h: 20, type: 'normal'},
+        {x: 750, y: 320, w: 100, h: 20, type: 'fast_fwd'},  // 밟으면 2초간 2배속 (점프 주의)
+        {x: 1000, y: 400, w: 80, h: 20, type: 'normal'},
+        {x: 1200, y: 300, w: 150, h: 20, type: 'unstable'},  // 밟으면 좌우로 진동함
+        {x: 1500, y: 450, w: 100, h: 20, type: 'normal'},
+        {x: 1750, y: 350, w: 150, h: 20, type: 'goal'}
     ];
 
     let platforms = [];
 
     function initStage() {
-        platforms = stage9Layout.map(p => ({ ...p, hidden: false, triggered: false, visualX: p.x }));
-        ghostPositions = [];
+        platforms = stage9Layout.map(p => ({ ...p, originalX: p.x, hidden: false }));
+        timeScale = 1.0;
+        document.body.classList.remove('time-warp');
     }
 
     function resetPlayer() {
         if(isCleared || isResetting) return;
         isResetting = true;
         deaths++;
-        deathDisplay.innerText = Math.floor(Math.random() * 999); // 사망 횟수 UI 억까
-        
+        deathDisplay.innerText = deaths;
         player.x = player.spawnX;
         player.y = player.spawnY;
         player.vx = 0;
         player.vy = 0;
         initStage();
-
-        setTimeout(() => { 
-            deathDisplay.innerText = deaths;
-            isResetting = false; 
-        }, 200);
+        setTimeout(() => { msgDisplay.style.display = 'none'; isResetting = false; }, 200);
     }
 
     window.addEventListener('keydown', e => keys[e.code] = true);
     window.addEventListener('keyup', e => keys[e.code] = false);
 
-    const setTouch = (id, k) => {
+    const setTouch = (id, key) => {
         const el = document.getElementById(id);
-        el.onpointerdown = (e) => { e.preventDefault(); keys[k] = true; };
-        el.onpointerup = (e) => { e.preventDefault(); keys[k] = false; };
-        el.onpointerleave = (e) => { e.preventDefault(); keys[k] = false; };
+        el.onpointerdown = (e) => { e.preventDefault(); keys[key] = true; };
+        el.onpointerup = (e) => { e.preventDefault(); keys[key] = false; };
     };
     setTouch('btnLeft', 'ArrowLeft');
     setTouch('btnRight', 'ArrowRight');
@@ -115,53 +103,56 @@
 
     function update() {
         if(isCleared) return;
-        frameCount++;
 
-        if (keys['ArrowLeft']) player.vx = -moveSpeed;
-        else if (keys['ArrowRight']) player.vx = moveSpeed;
+        // 시간 배율(timeScale)이 이동과 중력에 모두 영향을 줌
+        let currentSpeed = baseMoveSpeed * timeScale;
+        let currentGravity = baseGravity * (timeScale * timeScale); // 가속도 보정
+
+        if (keys['ArrowLeft']) player.vx = -currentSpeed;
+        else if (keys['ArrowRight']) player.vx = currentSpeed;
         else player.vx *= 0.8;
 
-        if ((keys['Space'] || keys['KeyW']) && player.grounded) {
-            player.vy = -11;
+        if (keys['Space'] && player.grounded) {
+            // 점프력도 시간 배율에 맞춰 물리적으로 조정
+            player.vy = -11 * timeScale;
             player.grounded = false;
         }
 
-        player.vy += gravity;
+        player.vy += currentGravity;
         player.x += player.vx;
         player.y += player.vy;
         player.grounded = false;
-
-        // 잔상 데이터 기록
-        ghostPositions.unshift({x: player.x, y: player.y});
-        if(ghostPositions.length > 10) ghostPositions.pop();
 
         let targetX = player.x - canvas.width / 3;
         cameraX += (targetX - cameraX) * 0.1;
 
         platforms.forEach(p => {
-            // 위치 글리치 억까
-            if (p.type === 'glitch_pos') {
-                p.visualX = p.x + Math.sin(frameCount * 0.2) * 30;
+            // 불안정한 발판(unstable) 애니메이션
+            if(p.type === 'unstable') {
+                p.x = p.originalX + Math.sin(Date.now() / 200) * 30;
             }
-
-            if (p.hidden) return;
 
             if (player.x < p.x + p.w && player.x + player.w > p.x &&
                 player.y + player.h > p.y && player.y < p.y + p.h) {
                 
-                if (player.vy > 0 && player.y + player.h - player.vy <= p.y) {
+                if (player.vy > 0 && player.y + player.h - player.vy <= p.y + 5) {
                     player.y = p.y - player.h;
                     player.vy = 0;
                     player.grounded = true;
 
-                    if (p.type === 'invisible_trigger' && !p.triggered) {
-                        p.triggered = true;
-                        // 다음 발판을 생성하거나 위치 변경
-                        platforms.push({x: 850, y: 350, w: 40, h: 20, type: 'normal'});
+                    if (p.type === 'slow_mo' && timeScale === 1.0) {
+                        timeScale = 0.5;
+                        document.body.classList.add('time-warp');
+                        msgDisplay.innerText = "느려지는 중...";
+                        msgDisplay.style.display = 'block';
+                        setTimeout(() => { timeScale = 1.0; document.body.classList.remove('time-warp'); msgDisplay.style.display = 'none'; }, 3000);
                     }
-                    if (p.type === 'fake_goal' && !p.triggered) {
-                        p.triggered = true;
-                        setTimeout(() => { p.hidden = true; }, 100);
+                    if (p.type === 'fast_fwd' && timeScale === 1.0) {
+                        timeScale = 1.6;
+                        document.body.classList.add('time-warp');
+                        msgDisplay.innerText = "가속 주의!";
+                        msgDisplay.style.display = 'block';
+                        setTimeout(() => { timeScale = 1.0; document.body.classList.remove('time-warp'); msgDisplay.style.display = 'none'; }, 2000);
                     }
                     if (p.type === 'goal') clearStage();
                 }
@@ -174,7 +165,9 @@
     function clearStage() {
         if(isCleared) return;
         isCleared = true;
+        msgDisplay.innerText = "STAGE 9 CLEAR!";
         msgDisplay.style.display = 'block';
+        msgDisplay.style.color = "#ffff00";
         setTimeout(() => {
             window.location.href = 'https://murang-korea.github.io/unfair/game_10.html';
         }, 3000);
@@ -182,44 +175,24 @@
 
     function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
         ctx.save();
         ctx.translate(-Math.floor(cameraX), 0);
 
-        // 잔상 그리기
-        ghostPositions.forEach((pos, i) => {
-            ctx.fillStyle = `rgba(0, 255, 0, ${0.3 - i * 0.03})`;
-            ctx.fillRect(pos.x, pos.y, player.w, player.h);
-        });
-
-        // 실제 플레이어
+        // 플레이어
         ctx.fillStyle = playerColor;
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = "#0f0";
         ctx.fillRect(player.x, player.y, player.w, player.h);
-        ctx.shadowBlur = 0;
 
         // 발판
         platforms.forEach(p => {
-            if (p.hidden) return;
-            ctx.fillStyle = (p.type === 'goal' || p.type === 'fake_goal') ? "#f00" : "#050";
-            ctx.strokeStyle = "#0f0";
-            ctx.lineWidth = 2;
-            
-            // glitch_pos 타입은 시각적 위치(visualX)에 그림
-            let drawX = (p.type === 'glitch_pos') ? p.visualX : p.x;
-            ctx.fillRect(drawX, p.y, p.w, p.h);
-            ctx.strokeRect(drawX, p.y, p.w, p.h);
+            if (p.type === 'goal') ctx.fillStyle = "#ff4444";
+            else if (p.type === 'slow_mo') ctx.fillStyle = "#44ffff";
+            else if (p.type === 'fast_fwd') ctx.fillStyle = "#ffaa00";
+            else if (p.type === 'unstable') ctx.fillStyle = "#aa44ff";
+            else ctx.fillStyle = "#555566";
+            ctx.fillRect(p.x, p.y, p.w, p.h);
         });
 
         ctx.restore();
-
-        // 전체 화면 노이즈 효과 (랜덤 선)
-        if(Math.random() > 0.95) {
-            ctx.fillStyle = "rgba(0, 255, 0, 0.05)";
-            ctx.fillRect(0, Math.random() * canvas.height, canvas.width, 2);
-        }
-
         requestAnimationFrame(() => { update(); draw(); });
     }
 
