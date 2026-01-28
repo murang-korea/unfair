@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Stage 15 - Aero Dynamics (Easy Bounce)</title>
+    <style>
+        body { margin: 0; padding: 0; background-color: #111; color: white; font-family: 'Courier New', monospace; overflow: hidden; touch-action: manipulation; }
+        canvas { display: block; background-color: #1a1a2e; }
+        #ui { position: absolute; top: 10px; left: 10px; z-index: 10; font-size: 18px; }
+        #msg { position: absolute; width: 100%; text-align: center; top: 40%; font-size: 24px; font-weight: bold; display: none; z-index: 10; text-shadow: 2px 2px #000; }
+        .controls { position: absolute; bottom: 20px; width: 100%; display: flex; justify-content: space-around; z-index: 10; pointer-events: none; }
+        .btn { width: 70px; height: 70px; background: rgba(255, 255, 255, 0.1); border: 1px solid white; display: flex; align-items: center; justify-content: center; pointer-events: auto; user-select: none; }
+    </style>
+</head>
+<body>
+<div id="ui">Stage 15 | Deaths: <span id="deathCount">0</span></div>
+<div id="msg">반동 벽을 약화했습니다</div>
+<canvas id="gameCanvas"></canvas>
+
+<div class="controls">
+    <div id="btnLeft" class="btn">◀</div>
+    <div id="btnJump" class="btn">JUMP</div>
+    <div id="btnRight" class="btn">▶</div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const deathDisplay = document.getElementById('deathCount');
+    const msgDisplay = document.getElementById('msg');
+
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    let deaths = 0;
+    let isCleared = false;
+    let isResetting = false;
+    const gravity = 0.45;
+    const moveSpeed = 4.8;
+    let cameraX = 0;
+    let frameCount = 0;
+
+    const playerColor = localStorage.getItem('playerColor') || '#ffffff';
+
+    let player = {
+        x: 80, y: 350, w: 25, h: 25, vx: 0, vy: 0,
+        grounded: false, spawnX: 80, spawnY: 350
+    };
+
+    let keys = {};
+
+    const stage15Layout = [
+        {x: 0, y: 450, w: 200, h: 40, type: 'normal'},
+        {x: 250, y: 200, w: 150, h: 300, type: 'up_wind', force: -0.8},
+        {x: 250, y: 450, w: 150, h: 20, type: 'normal'},
+        {x: 500, y: 150, w: 300, h: 400, type: 'left_wind', force: -1.2},
+        {x: 550, y: 380, w: 120, h: 20, type: 'normal'},
+        // 핑크색 반동벽 너비 축소(40->20), 위치 살짝 조정
+        {x: 920, y: 150, w: 20, h: 220, type: 'bouncer_wall'},
+        {x: 850, y: 450, w: 150, h: 20, type: 'normal'},
+        {x: 1100, y: 350, w: 80, h: 20, type: 'normal'},
+        {x: 1250, y: 280, w: 80, h: 20, type: 'disappear'},
+        {x: 1450, y: 250, w: 150, h: 20, type: 'goal'}
+    ];
+
+    let platforms = [];
+    function initStage() {
+        platforms = stage15Layout.map(p => ({ ...p, hidden: false }));
+    }
+
+    function resetPlayer() {
+        if(isCleared || isResetting) return;
+        isResetting = true;
+        deaths++;
+        deathDisplay.innerText = deaths;
+        player.x = player.spawnX;
+        player.y = player.spawnY;
+        player.vx = 0; player.vy = 0;
+        initStage();
+        setTimeout(() => {
+            msgDisplay.style.display = 'none';
+            isResetting = false;
+        }, 150);
+    }
+
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    const setTouch = (id, k) => {
+        const el = document.getElementById(id);
+        el.onpointerdown = (e) => { e.preventDefault(); keys[k] = true; };
+        el.onpointerup = (e) => { e.preventDefault(); keys[k] = false; };
+    };
+    setTouch('btnLeft', 'ArrowLeft'); setTouch('btnRight', 'ArrowRight'); setTouch('btnJump', 'Space');
+
+    function update() {
+        if(isCleared) return;
+        frameCount++;
+
+        if (keys['ArrowLeft']) player.vx = -moveSpeed;
+        else if (keys['ArrowRight']) player.vx = moveSpeed;
+        else player.vx *= 0.8;
+
+        if (keys['Space'] && player.grounded) {
+            player.vy = -10.5;
+            player.grounded = false;
+        }
+
+        player.vy += gravity;
+        
+        platforms.forEach(p => {
+            if (player.x + player.w > p.x && player.x < p.x + p.w &&
+                player.y + player.h > p.y && player.y < p.y + p.h) {
+                if (p.type === 'up_wind') player.vy += p.force;
+                if (p.type === 'left_wind') player.vx += p.force;
+            }
+        });
+
+        player.x += player.vx;
+        player.y += player.vy;
+        player.grounded = false;
+
+        let targetCameraX = player.x - canvas.width / 3;
+        cameraX += (targetCameraX - cameraX) * 0.1;
+
+        platforms.forEach(p => {
+            if (p.hidden || p.type.includes('wind')) return;
+
+            if (player.x < p.x + p.w && player.x + player.w > p.x &&
+                player.y + player.h > p.y && player.y < p.y + p.h) {
+                
+                // 반동 벽 반동력 대폭 하향 (-1.2 -> -0.4)
+                if (p.type === 'bouncer_wall') {
+                    player.vx = (player.x < p.x) ? -3 : 3; 
+                    player.x += player.vx;
+                    return;
+                }
+
+                if (player.vy > 0 && player.y + player.h - player.vy <= p.y + 7) {
+                    player.y = p.y - player.h;
+                    player.vy = 0;
+                    player.grounded = true;
+                    if (p.type === 'disappear') setTimeout(() => p.hidden = true, 200);
+                    if (p.type === 'goal') clearStage();
+                }
+            }
+        });
+
+        if (player.y > canvas.height + 100 || player.x < cameraX - 100) resetPlayer();
+    }
+
+    function clearStage() {
+        if(isCleared) return;
+        isCleared = true;
+        msgDisplay.innerText = "STAGE 15 CLEAR!";
+        msgDisplay.style.display = 'block';
+        msgDisplay.style.color = "#00ffff";
+        setTimeout(() => {
+            window.location.href = 'https://murang-korea.github.io/unfair/game_16.html';
+        }, 3000);
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(-Math.floor(cameraX), 0);
+
+        platforms.forEach(p => {
+            if (p.type === 'up_wind') {
+                ctx.fillStyle = "rgba(100, 100, 255, 0.15)";
+                ctx.fillRect(p.x, p.y, p.w, p.h);
+            }
+            if (p.type === 'left_wind') {
+                ctx.fillStyle = "rgba(255, 255, 255, 0.05)";
+                ctx.fillRect(p.x, p.y, p.w, p.h);
+            }
+        });
+
+        ctx.fillStyle = playerColor;
+        ctx.fillRect(player.x, player.y, player.w, player.h);
+
+        platforms.forEach(p => {
+            if (p.hidden || p.type.includes('wind')) return;
+            if (p.type === 'goal') ctx.fillStyle = "#ff4444";
+            else if (p.type === 'bouncer_wall') ctx.fillStyle = "#ff00ff";
+            else if (p.type === 'disappear') ctx.fillStyle = "#888";
+            else ctx.fillStyle = "#555";
+            ctx.fillRect(p.x, p.y, p.w, p.h);
+        });
+
+        ctx.restore();
+        requestAnimationFrame(() => { update(); draw(); });
+    }
+
+    initStage();
+    draw();
+</script>
+</body>
+</html>
