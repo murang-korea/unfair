@@ -3,27 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Stage 12 - Illusion Chaos</title>
+    <title>Stage 12 - Morphing Maze</title>
     <style>
-        body { margin: 0; padding: 0; background-color: #000; color: #ff00ff; font-family: 'Courier New', monospace; overflow: hidden; touch-action: manipulation; }
-        canvas { display: block; background-color: #0a000a; }
-        #ui { position: absolute; top: 10px; left: 10px; z-index: 10; font-size: 18px; text-shadow: 0 0 5px #ff00ff; }
-        #msg { position: absolute; width: 100%; text-align: center; top: 40%; font-size: 32px; font-weight: bold; display: none; z-index: 10; text-shadow: 2px 2px #000; }
+        body { margin: 0; padding: 0; background-color: #111; color: white; font-family: 'Courier New', monospace; overflow: hidden; touch-action: manipulation; }
+        canvas { display: block; background-color: #1a1a2e; }
+        #ui { position: absolute; top: 10px; left: 10px; z-index: 10; font-size: 18px; }
+        #msg { position: absolute; width: 100%; text-align: center; top: 40%; font-size: 24px; font-weight: bold; display: none; z-index: 10; text-shadow: 2px 2px #000; }
         .controls { position: absolute; bottom: 20px; width: 100%; display: flex; justify-content: space-around; z-index: 10; pointer-events: none; }
-        .btn { width: 70px; height: 70px; background: rgba(255, 0, 255, 0.1); border: 1px solid #ff00ff; display: flex; align-items: center; justify-content: center; pointer-events: auto; user-select: none; color: #ff00ff; }
+        .btn { width: 70px; height: 70px; background: rgba(255, 255, 255, 0.1); border: 1px solid white; display: flex; align-items: center; justify-content: center; pointer-events: auto; user-select: none; }
     </style>
 </head>
 <body>
+<div id="ui">Stage 12 | Deaths: <span id="deathCount">0</span></div>
+<div id="msg">몸집을 줄이세요</div>
+<canvas id="gameCanvas"></canvas>
 
-    <div id="ui">REALITY_STABILITY: <span id="sync">100</span>% | Deaths: <span id="deathCount">0</span></div>
-    <div id="msg">STAGE 12 CLEAR!</div>
-    <canvas id="gameCanvas"></canvas>
-
-    <div class="controls">
-        <div id="btnLeft" class="btn">◀</div>
-        <div id="btnJump" class="btn">JUMP</div>
-        <div id="btnRight" class="btn">▶</div>
-    </div>
+<div class="controls">
+    <div id="btnLeft" class="btn">◀</div>
+    <div id="btnJump" class="btn">JUMP</div>
+    <div id="btnRight" class="btn">▶</div>
+</div>
 
 <script>
     const canvas = document.getElementById('gameCanvas');
@@ -44,33 +43,34 @@
     const gravity = 0.45;
     const moveSpeed = 4.5;
     let cameraX = 0;
-    
+
     const playerColor = localStorage.getItem('playerColor') || '#ffffff';
-    let decoys = []; // 가짜 분신들
 
     let player = {
-        x: 100, y: 300, w: 25, h: 25, vx: 0, vy: 0,
-        grounded: false,
-        spawnX: 100, spawnY: 300
+        x: 100, y: 400, w: 25, h: 25, vx: 0, vy: 0,
+        grounded: false, spawnX: 100, spawnY: 400, scale: 1
     };
 
     let keys = {};
-    
+
+    // 스테이지 12 구성: 크기 변화 구역과 탄성 벽
     const stage12Layout = [
-        {x: 0, y: 450, w: 200, h: 40, type: 'normal'},
-        {x: 300, y: 400, w: 100, h: 20, type: 'swap'},      // 점프할 때마다 높이가 변함
-        {x: 500, y: 320, w: 80, h: 20, type: 'normal'},
-        {x: 700, y: 420, w: 100, h: 20, type: 'swap'},
-        {x: 900, y: 300, w: 120, h: 20, type: 'disappear'},
-        {x: 1150, y: 380, w: 80, h: 20, type: 'fake_goal'},
-        {x: 1400, y: 350, w: 200, h: 20, type: 'goal'}
+        {x: 0, y: 500, w: 300, h: 40, type: 'normal'},
+        {x: 350, y: 420, w: 100, h: 20, type: 'shrink'},    // 밟으면 플레이어가 작아짐 (좁은 틈 통과용)
+        {x: 500, y: 300, w: 40, h: 250, type: 'barrier'},  // 작아져야만 아래 틈으로 통과 가능
+        {x: 500, y: 500, w: 200, h: 20, type: 'normal'},
+        {x: 750, y: 450, w: 100, h: 20, type: 'bouncy'},   // 밟으면 위로 세게 튕김
+        {x: 900, y: 350, w: 100, h: 20, type: 'enlarge'},  // 밟으면 다시 커짐 (멀리 뛰기용)
+        {x: 1100, y: 450, w: 50, h: 20, type: 'normal'},
+        {x: 1250, y: 400, w: 50, h: 20, type: 'normal'},
+        {x: 1450, y: 350, w: 150, h: 20, type: 'goal'}
     ];
 
     let platforms = [];
 
     function initStage() {
-        platforms = stage12Layout.map(p => ({ ...p, hidden: false, triggered: false, originalY: p.y }));
-        decoys = [];
+        platforms = stage12Layout.map(p => ({ ...p, hidden: false }));
+        player.w = 25; player.h = 25; player.scale = 1;
     }
 
     function resetPlayer() {
@@ -80,10 +80,12 @@
         deathDisplay.innerText = deaths;
         player.x = player.spawnX;
         player.y = player.spawnY;
-        player.vx = 0;
-        player.vy = 0;
+        player.vx = 0; player.vy = 0;
         initStage();
-        setTimeout(() => { isResetting = false; }, 200);
+        setTimeout(() => {
+            msgDisplay.style.display = 'none';
+            isResetting = false;
+        }, 150);
     }
 
     window.addEventListener('keydown', e => keys[e.code] = true);
@@ -93,32 +95,22 @@
         const el = document.getElementById(id);
         el.onpointerdown = (e) => { e.preventDefault(); keys[k] = true; };
         el.onpointerup = (e) => { e.preventDefault(); keys[k] = false; };
-        el.onpointerleave = (e) => { e.preventDefault(); keys[k] = false; };
     };
-    setTouch('btnLeft', 'ArrowLeft');
-    setTouch('btnRight', 'ArrowRight');
-    setTouch('btnJump', 'Space');
+    setTouch('btnLeft', 'ArrowLeft'); setTouch('btnRight', 'ArrowRight'); setTouch('btnJump', 'Space');
 
     function update() {
         if(isCleared) return;
 
-        if (keys['ArrowLeft']) player.vx = -moveSpeed;
-        else if (keys['ArrowRight']) player.vx = moveSpeed;
+        // 크기에 따른 속도 조절 (작으면 빠름)
+        let speed = moveSpeed * (player.scale < 1 ? 1.2 : 1);
+        if (keys['ArrowLeft']) player.vx = -speed;
+        else if (keys['ArrowRight']) player.vx = speed;
         else player.vx *= 0.8;
 
-        if ((keys['Space'] || keys['KeyW']) && player.grounded) {
-            player.vy = -11;
+        // 크기에 따른 점프력 조절 (크면 점프가 높음)
+        if (keys['Space'] && player.grounded) {
+            player.vy = player.scale > 1 ? -14 : -11;
             player.grounded = false;
-            
-            // 억까: 점프할 때마다 swap 타입 발판들의 높이가 바뀜
-            platforms.forEach(p => {
-                if (p.type === 'swap') {
-                    p.y = p.y === p.originalY ? p.originalY - 100 : p.originalY;
-                }
-            });
-
-            // 억까: 점프할 때 분신 생성
-            decoys.push({x: player.x, y: player.y, vx: (Math.random()-0.5)*10, vy: -11, life: 60});
         }
 
         player.vy += gravity;
@@ -126,46 +118,50 @@
         player.y += player.vy;
         player.grounded = false;
 
-        // 분신 업데이트
-        decoys.forEach((d, i) => {
-            d.vy += gravity;
-            d.x += d.vx;
-            d.y += d.vy;
-            d.life--;
-            if(d.life <= 0) decoys.splice(i, 1);
-        });
-
-        let targetX = player.x - canvas.width / 3;
-        cameraX += (targetX - cameraX) * 0.1;
+        cameraX += (player.x - canvas.width / 3 - cameraX) * 0.1;
 
         platforms.forEach(p => {
-            if (p.hidden) return;
-
             if (player.x < p.x + p.w && player.x + player.w > p.x &&
                 player.y + player.h > p.y && player.y < p.y + p.h) {
                 
+                // 옆면 충돌 시 리셋 (barrier 타입)
+                if (p.type === 'barrier' && player.y + player.h > p.y + 10) {
+                    resetPlayer();
+                }
+
                 if (player.vy > 0 && player.y + player.h - player.vy <= p.y) {
                     player.y = p.y - player.h;
                     player.vy = 0;
                     player.grounded = true;
 
-                    if (p.type === 'disappear') setTimeout(() => p.hidden = true, 150);
-                    if (p.type === 'fake_goal' && !p.triggered) {
-                        p.triggered = true;
-                        setTimeout(() => { p.hidden = true; }, 150);
+                    if (p.type === 'shrink') {
+                        player.w = 12; player.h = 12; player.scale = 0.5;
+                        msgDisplay.innerText = "작아졌습니다!";
+                        msgDisplay.style.display = "block";
+                    }
+                    if (p.type === 'enlarge') {
+                        player.w = 35; player.h = 35; player.scale = 1.5;
+                        msgDisplay.innerText = "거대해졌습니다!";
+                        msgDisplay.style.display = "block";
+                    }
+                    if (p.type === 'bouncy') {
+                        player.vy = -18;
+                        player.grounded = false;
                     }
                     if (p.type === 'goal') clearStage();
                 }
             }
         });
 
-        if (player.y > canvas.height + 100 || player.x < cameraX - 100) resetPlayer();
+        if (player.y > canvas.height + 100 || player.x < cameraX - 50) resetPlayer();
     }
 
     function clearStage() {
         if(isCleared) return;
         isCleared = true;
+        msgDisplay.innerText = "STAGE 12 CLEAR!";
         msgDisplay.style.display = 'block';
+        msgDisplay.style.color = "#00ff88";
         setTimeout(() => {
             window.location.href = 'https://murang-korea.github.io/unfair/game_13.html';
         }, 3000);
@@ -176,22 +172,18 @@
         ctx.save();
         ctx.translate(-Math.floor(cameraX), 0);
 
-        // 분신 그리기
-        decoys.forEach(d => {
-            ctx.fillStyle = `rgba(255, 0, 255, ${d.life / 60})`;
-            ctx.fillRect(d.x, d.y, player.w, player.h);
-        });
-
-        // 실제 플레이어
+        // 플레이어
         ctx.fillStyle = playerColor;
         ctx.fillRect(player.x, player.y, player.w, player.h);
 
         // 발판
         platforms.forEach(p => {
-            if (p.hidden) return;
-            if (p.type === 'swap') ctx.fillStyle = "#800080";
-            else if (p.type === 'goal' || p.type === 'fake_goal') ctx.fillStyle = "#ff0000";
-            else ctx.fillStyle = "#330033";
+            if (p.type === 'goal') ctx.fillStyle = "#ff4444";
+            else if (p.type === 'shrink') ctx.fillStyle = "#aaaaff";
+            else if (p.type === 'enlarge') ctx.fillStyle = "#ffaa00";
+            else if (p.type === 'bouncy') ctx.fillStyle = "#00ff00";
+            else if (p.type === 'barrier') ctx.fillStyle = "#333";
+            else ctx.fillStyle = "#666";
             ctx.fillRect(p.x, p.y, p.w, p.h);
         });
 
