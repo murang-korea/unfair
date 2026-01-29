@@ -187,5 +187,46 @@ Notification.requestPermission().then(permission => {
   }
 });
 </script>
+<script type="module">
+  // Firebase SDK
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+  import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBD3xGanrrWmSXQjy4ERBV9MpCfYpLSXQM",
+    authDomain: "unfair-f15f8.firebaseapp.com",
+    projectId: "unfair-f15f8",
+    storageBucket: "unfair-f15f8.firebasestorage.app",
+    messagingSenderId: "782743211131",
+    appId: "1:782743211131:web:187f30e93cbbb9f40566de",
+    measurementId: "G-G0NN34TE56"
+  };
+
+  // Firebase 초기화
+  const app = initializeApp(firebaseConfig);
+  const messaging = getMessaging(app);
+
+  // 🔔 알림 권한 요청
+  Notification.requestPermission().then(permission => {
+    if (permission !== "granted") {
+      console.log("❌ 알림 권한 거부됨");
+      return;
+    }
+
+    // 🔑 토큰 가져오기
+    getToken(messaging, {
+      vapidKey: "🔥여기에_VAPID_키🔥"
+    }).then(token => {
+      if (token) {
+        console.log("🔥 FCM TOKEN ↓↓↓");
+        console.log(token);
+      } else {
+        console.log("❌ 토큰 없음");
+      }
+    }).catch(err => {
+      console.error("토큰 에러:", err);
+    });
+  });
+</script>
 </body>
 </html>
