@@ -54,3 +54,30 @@ self.addEventListener('fetch', event => {
     })
   );
 });
+
+
+importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js');
+
+firebase.initializeApp({
+  apiKey: "AIzaSyBD3xGanrrWmSXQjy4ERBV9MpCfYpLSXQM",
+  authDomain: "unfair-f15f8.firebaseapp.com",
+  projectId: "unfair-f15f8",
+  messagingSenderId: "782743211131",
+  appId: "1:782743211131:web:187f30e93cbbb9f40566de"
+});
+
+const messaging = firebase.messaging();
+
+// 🔔 백그라운드 푸시 처리
+messaging.onBackgroundMessage(payload => {
+  console.log('[SW] Push received', payload);
+
+  self.registration.showNotification(
+    payload.notification.title,
+    {
+      body: payload.notification.body,
+      icon: '/unfair/icon-192.png'
+    }
+  );
+});
