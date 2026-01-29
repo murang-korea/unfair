@@ -140,20 +140,14 @@
         }
         drawBg();
     </script>
-    <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js');
-    }
-    </script>
-    <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/unfair/sw.js');
-    }
-    </script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
 
 <script>
+/* ===============================
+   Firebase 초기화
+================================ */
 firebase.initializeApp({
   apiKey: "AIzaSyBD3xGanrrWmSXQjy4ERBV9MpCfYpLSXQM",
   authDomain: "unfair-f15f8.firebaseapp.com",
@@ -164,14 +158,31 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// 알림 권한 요청
+/* ===============================
+   Service Worker 등록 (단 1번)
+================================ */
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/unfair/sw.js')
+    .then(reg => {
+      console.log('Service Worker 등록 완료');
+      messaging.useServiceWorker(reg);
+    })
+    .catch(err => console.error('SW 등록 실패', err));
+}
+
+/* ===============================
+   푸시 알림 권한 + 토큰 획득
+================================ */
 Notification.requestPermission().then(permission => {
   if (permission === 'granted') {
     messaging.getToken({
-      vapidKey: "🔥여기에_아까_복사한_VAPID_KEY🔥"
+      vapidKey: "🔥여기에_네_Firebase_웹푸시_VAPID_KEY🔥"
     }).then(token => {
-      console.log('FCM 토큰:', token);
-      // 👉 이 토큰이 "이 유저"임
+      console.log('📌 FCM 토큰:', token);
+      // 👉 지금은 콘솔 출력만
+      // 👉 나중에 서버/Firestore에 저장하면 됨
+    }).catch(err => {
+      console.error('토큰 실패', err);
     });
   }
 });
