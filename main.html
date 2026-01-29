@@ -139,15 +139,7 @@
             requestAnimationFrame(drawBg);
         }
         drawBg();
-    </script>
-    <!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
-
-<script>
-/* ===============================
-   Firebase 초기화
-================================ */
+    </script><script>
 firebase.initializeApp({
   apiKey: "AIzaSyBD3xGanrrWmSXQjy4ERBV9MpCfYpLSXQM",
   authDomain: "unfair-f15f8.firebaseapp.com",
@@ -158,75 +150,28 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-/* ===============================
-   Service Worker 등록 (단 1번)
-================================ */
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/unfair/sw.js')
+  navigator.serviceWorker.register('/firebase-messaging-sw.js')
     .then(reg => {
-      console.log('Service Worker 등록 완료');
       messaging.useServiceWorker(reg);
-    })
-    .catch(err => console.error('SW 등록 실패', err));
+
+      Notification.requestPermission().then(permission => {
+        if (permission === 'granted') {
+          messaging.getToken({
+            vapidKey: "BBGsiZMna5KHTZDiT9nVov17iC4TtS3DEKSA6xZBW7aUwvhYxXiPh"
+          }).then(token => {
+            // 🔥 화면에 토큰 표시
+            document.body.innerHTML = `
+              <div style="padding:20px;color:white;word-break:break-all;">
+                <h2>FCM TOKEN</h2>
+                <p>${token}</p>
+              </div>
+            `;
+          });
+        }
+      });
+    });
 }
-
-/* ===============================
-   푸시 알림 권한 + 토큰 획득
-================================ */
-Notification.requestPermission().then(permission => {
-  if (permission === 'granted') {
-    messaging.getToken({
-      vapidKey: "BBGsiZMna5KHTZDiT9nVov17iC4TtS3DEKSA6xZBW7aUwvhYxXiPh"
-    }).then(token => {
-      console.log('📌 FCM 토큰:', token);
-      // 👉 지금은 콘솔 출력만
-      // 👉 나중에 서버/Firestore에 저장하면 됨
-    }).catch(err => {
-      console.error('토큰 실패', err);
-    });
-  }
-});
-</script>
-<script type="module">
-  // Firebase SDK
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-  import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging.js";
-
-  const firebaseConfig = {
-    apiKey: "AIzaSyBD3xGanrrWmSXQjy4ERBV9MpCfYpLSXQM",
-    authDomain: "unfair-f15f8.firebaseapp.com",
-    projectId: "unfair-f15f8",
-    storageBucket: "unfair-f15f8.firebasestorage.app",
-    messagingSenderId: "782743211131",
-    appId: "1:782743211131:web:187f30e93cbbb9f40566de",
-    measurementId: "G-G0NN34TE56"
-  };
-
-  // Firebase 초기화
-  const app = initializeApp(firebaseConfig);
-  const messaging = getMessaging(app);
-
-  // 🔔 알림 권한 요청
-  Notification.requestPermission().then(permission => {
-    if (permission !== "granted") {
-      console.log("❌ 알림 권한 거부됨");
-      return;
-    }
-
-    // 🔑 토큰 가져오기
-    getToken(messaging, {
-      vapidKey: "🔥여기에_VAPID_키🔥"
-    }).then(token => {
-      if (token) {
-        console.log("🔥 FCM TOKEN ↓↓↓");
-        console.log(token);
-      } else {
-        console.log("❌ 토큰 없음");
-      }
-    }).catch(err => {
-      console.error("토큰 에러:", err);
-    });
-  });
-</script>
+    </script>
 </body>
 </html>
