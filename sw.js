@@ -1,20 +1,4 @@
-/* ===============================
-   Firebase (항상 최상단)
-================================ */
-importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js');
-
-firebase.initializeApp({
-  apiKey: "AIzaSyBD3xGanrrWmSXQjy4ERBV9MpCfYpLSXQM",
-  authDomain: "unfair-f15f8.firebaseapp.com",
-  projectId: "unfair-f15f8",
-  messagingSenderId: "782743211131",
-  appId: "1:782743211131:web:187f30e93cbbb9f40566de"
-});
-
-const messaging = firebase.messaging();
-
-/* ===============================
+//* ===============================
    Cache 설정
 ================================ */
 const CACHE_NAME = 'unfair-cache-v1';
