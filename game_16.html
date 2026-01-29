@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Stage 16 - Momentum Madness</title>
+    <style>
+        body { margin: 0; padding: 0; background-color: #111; color: white; font-family: 'Courier New', monospace; overflow: hidden; touch-action: manipulation; }
+        canvas { display: block; background-color: #1a1a1a; }
+        #ui { position: absolute; top: 10px; left: 10px; z-index: 10; font-size: 18px; }
+        #msg { position: absolute; width: 100%; text-align: center; top: 40%; font-size: 24px; font-weight: bold; display: none; z-index: 10; text-shadow: 2px 2px #000; }
+        .controls { position: absolute; bottom: 20px; width: 100%; display: flex; justify-content: space-around; z-index: 10; pointer-events: none; }
+        .btn { width: 70px; height: 70px; background: rgba(255, 255, 255, 0.1); border: 1px solid white; display: flex; align-items: center; justify-content: center; pointer-events: auto; user-select: none; }
+    </style>
+</head>
+<body>
+<div id="ui">Stage 16 | Deaths: <span id="deathCount">0</span></div>
+<div id="msg">운보다 실력</div>
+<canvas id="gameCanvas"></canvas>
+
+<div class="controls">
+    <div id="btnLeft" class="btn">◀</div>
+    <div id="btnJump" class="btn">JUMP</div>
+    <div id="btnRight" class="btn">▶</div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const deathDisplay = document.getElementById('deathCount');
+    const msgDisplay = document.getElementById('msg');
+
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    let deaths = 0;
+    let isCleared = false;
+    let isResetting = false;
+    const gravity = 0.48;
+    const moveSpeed = 4.8;
+    let cameraX = 0;
+    const playerColor = localStorage.getItem('playerColor') || '#ffffff';
+
+    let player = {
+        x: 80, y: 400, w: 25, h: 25, vx: 0, vy: 0,
+        grounded: false, spawnX: 80, spawnY: 400
+    };
+
+    let keys = {};
+    let platforms = [];
+    let frameCount = 0;
+
+    // 스테이지 16 레이아웃: 'swing' 타입은 좌우로 진동, 'trampoline'은 강한 반동
+    const stage16Layout = [
+        {x: 0, y: 500, w: 200, h: 30, type: 'normal'},
+        {x: 300, y: 450, w: 80, h: 20, type: 'swing', range: 100, speed: 0.05, originX: 300}, 
+        {x: 550, y: 400, w: 60, h: 20, type: 'trampoline'}, 
+        {x: 750, y: 250, w: 100, h: 20, type: 'falling', triggered: false}, 
+        {x: 1000, y: 350, w: 80, h: 20, type: 'swing', range: 150, speed: 0.07, originX: 1000},
+        {x: 1250, y: 450, w: 120, h: 20, type: 'fake_goal'}, // 닿으면 아래로 통과됨
+        {x: 1250, y: 300, w: 100, h: 20, type: 'goal'} // 진짜 목표는 위에 숨어있음
+    ];
+
+    function initStage() {
+        platforms = stage16Layout.map(p => ({ ...p, hidden: false, currentX: p.x, currentY: p.y }));
+    }
+
+    function resetPlayer() {
+        if(isCleared || isResetting) return;
+        isResetting = true;
+        deaths++;
+        deathDisplay.innerText = deaths;
+        player.x = player.spawnX;
+        player.y = player.spawnY;
+        player.vx = 0;
+        player.vy = 0;
+        initStage();
+        setTimeout(() => { msgDisplay.style.display = 'none'; isResetting = false; }, 200);
+    }
+
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    const setTouch = (id, k) => {
+        const el = document.getElementById(id);
+        el.onpointerdown = (e) => { e.preventDefault(); keys[k] = true; };
+        el.onpointerup = (e) => { e.preventDefault(); keys[k] = false; };
+    };
+    setTouch('btnLeft', 'ArrowLeft');
+    setTouch('btnRight', 'ArrowRight');
+    setTouch('btnJump', 'Space');
+
+    function update() {
+        if(isCleared) return;
+        frameCount++;
+
+        if (keys['ArrowLeft']) player.vx = -moveSpeed;
+        else if (keys['ArrowRight']) player.vx = moveSpeed;
+        else player.vx *= 0.85;
+
+        if ((keys['Space'] || keys['KeyW']) && player.grounded) {
+            player.vy = -11.5;
+            player.grounded = false;
+        }
+
+        player.vy += gravity;
+        player.x += player.vx;
+        player.y += player.vy;
+        player.grounded = false;
+
+        let targetX = player.x - canvas.width / 3;
+        cameraX += (targetX - cameraX) * 0.1;
+
+        platforms.forEach(p => {
+            // 움직이는 발판 로직
+            if (p.type === 'swing') {
+                p.currentX = p.originX + Math.sin(frameCount * p.speed) * p.range;
+            }
+            if (p.type === 'falling' && p.triggered) {
+                p.currentY += 5;
+            }
+
+            // 충돌 판정
+            if (player.x < p.currentX + p.w && player.x + player.w > p.currentX &&
+                player.y + player.h > p.currentY && player.y < p.currentY + p.h) {
+                
+                if (player.vy > 0 && player.y + player.h - player.vy <= p.currentY) {
+                    if (p.type === 'fake_goal') {
+                        // 가짜 목표는 밟는 순간 사라지거나 통과됨
+                        msgDisplay.innerText = "진짜는 더 높은 곳에";
+                        msgDisplay.style.display = 'block';
+                        return; 
+                    }
+
+                    player.y = p.currentY - player.h;
+                    player.vy = (p.type === 'trampoline') ? -16 : 0;
+                    player.grounded = true;
+
+                    if (p.type === 'falling') p.triggered = true;
+                    if (p.type === 'goal') clearStage();
+                    
+                    // 움직이는 발판 위에서의 관성
+                    if (p.type === 'swing') player.x += Math.cos(frameCount * p.speed) * (p.range * p.speed);
+                }
+            }
+        });
+
+        if (player.y > canvas.height + 100 || player.x < cameraX - 100) resetPlayer();
+    }
+
+    function clearStage() {
+        if(isCleared) return;
+        isCleared = true;
+        msgDisplay.innerText = "STAGE 16 CLEAR!";
+        msgDisplay.style.color = "#00ff00";
+        msgDisplay.style.display = 'block';
+        setTimeout(() => {
+            window.location.href = 'https://murang-korea.github.io/unfair/game_17.html';
+        }, 3000);
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(-Math.floor(cameraX), 0);
+
+        platforms.forEach(p => {
+            if (p.type === 'goal') ctx.fillStyle = "#ff4444";
+            else if (p.type === 'fake_goal') ctx.fillStyle = "#ff8888";
+            else if (p.type === 'trampoline') ctx.fillStyle = "#44ff44";
+            else if (p.type === 'swing') ctx.fillStyle = "#4444ff";
+            else ctx.fillStyle = "#777";
+            ctx.fillRect(p.currentX, p.currentY, p.w, p.h);
+        });
+
+        ctx.fillStyle = playerColor;
+        ctx.fillRect(player.x, player.y, player.w, player.h);
+
+        ctx.restore();
+        requestAnimationFrame(() => { update(); draw(); });
+    }
+
+    initStage();
+    draw();
+</script>
+</body>
+</html>
