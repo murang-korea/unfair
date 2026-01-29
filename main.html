@@ -150,5 +150,31 @@
       navigator.serviceWorker.register('/unfair/sw.js');
     }
     </script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+
+<script>
+firebase.initializeApp({
+  apiKey: "AIzaSyBD3xGanrrWmSXQjy4ERBV9MpCfYpLSXQM",
+  authDomain: "unfair-f15f8.firebaseapp.com",
+  projectId: "unfair-f15f8",
+  messagingSenderId: "782743211131",
+  appId: "1:782743211131:web:187f30e93cbbb9f40566de"
+});
+
+const messaging = firebase.messaging();
+
+// 알림 권한 요청
+Notification.requestPermission().then(permission => {
+  if (permission === 'granted') {
+    messaging.getToken({
+      vapidKey: "🔥여기에_아까_복사한_VAPID_KEY🔥"
+    }).then(token => {
+      console.log('FCM 토큰:', token);
+      // 👉 이 토큰이 "이 유저"임
+    });
+  }
+});
+</script>
 </body>
 </html>
