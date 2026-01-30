@@ -1,8 +1,8 @@
 {
   "id": "/unfair/",
   "name": "Unfair Parkour",
-  "short_name": "Unfair",
-  "description": "억까를 극한으로 즐기는 미니멀 파쿠르 게임",
+  "short_name": "UP",
+  "description": "β",
   "start_url": "/unfair/main.html",
   "scope": "/unfair/",
   "display": "standalone",
