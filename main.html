@@ -14,15 +14,14 @@
             height: 100vh;
         }
 
-        /* 메인 메뉴 스타일 */
         #main-menu {
             text-align: center;
             z-index: 100;
         }
 
         h1 {
-            font-size: 3.5rem; /* 크기를 살짝 키움 */
-            margin-bottom: 80px; /* 타이틀과 버튼 사이 간격 확대 */
+            font-size: 3.5rem;
+            margin-bottom: 80px;
             letter-spacing: -2px;
             animation: flicker 2s infinite;
             line-height: 1;
@@ -33,11 +32,10 @@
             50% { opacity: 0.7; }
         }
 
-        /* 버튼 컨테이너: 버튼 사이의 간격을 조절 */
         .menu-container {
             display: flex;
             flex-direction: column;
-            gap: 30px; /* 버튼 사이의 간격을 20px -> 30px로 확대 */
+            gap: 30px;
             align-items: center;
         }
 
@@ -53,7 +51,7 @@
             transition: all 0.2s;
             text-decoration: none;
             display: block;
-            box-sizing: border-box; /* 패딩이 너비에 영향을 주지 않도록 설정 */
+            box-sizing: border-box;
         }
 
         .menu-btn:hover {
@@ -62,7 +60,6 @@
             transform: scale(1.05);
         }
 
-        /* 배경 애니메이션용 캔버스 */
         #bg-canvas {
             position: absolute;
             top: 0; left: 0;
@@ -72,12 +69,13 @@
         }
 
         .sub-text {
-            margin-top: 60px; /* 버튼 하단과의 간격 확대 */
+            margin-top: 60px;
             font-size: 0.8rem;
             color: #666;
             letter-spacing: 2px;
         }
     </style>
+
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#3e3e3e">
 </head>
@@ -97,6 +95,10 @@
                 STAGE SELECT
             </a>
 
+            <a class="menu-btn" href="https://murang-korea.github.io/unfair/random.html">
+                RANDOM MODE
+            </a>
+
             <a class="menu-btn" href="https://murang-korea.github.io/unfair/skins.html">
                 CHANGE SKIN
             </a>
@@ -106,7 +108,6 @@
     </div>
 
     <script>
-        // 배경 애니메이션 (사각형들이 떨어지는 효과)
         const canvas = document.getElementById('bg-canvas');
         const ctx = canvas.getContext('2d');
         
@@ -118,7 +119,7 @@
         resize();
 
         let particles = [];
-        for(let i=0; i<20; i++) {
+        for (let i = 0; i < 20; i++) {
             particles.push({
                 x: Math.random() * canvas.width,
                 y: Math.random() * canvas.height,
@@ -134,8 +135,9 @@
             particles.forEach(p => {
                 ctx.fillRect(p.x, p.y, p.size, p.size);
                 p.y += p.speed;
-                if(p.y > canvas.height) p.y = -p.size;
+                if (p.y > canvas.height) p.y = -p.size;
             });
+
             requestAnimationFrame(drawBg);
         }
         drawBg();
